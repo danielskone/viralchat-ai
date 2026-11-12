@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ViralChat AI
 
-## Getting Started
+**Turn conversations into customers automatically.**
+AI-powered Instagram & Facebook Messenger automation, unified inbox and CRM. This repository contains the **Phase 1 MVP**.
 
-First, run the development server:
+## What's in Phase 1
+
+| Area | What works |
+| --- | --- |
+| Auth & workspaces | Email/password sign-up (bcrypt, DB-backed sessions in httpOnly cookies), onboarding, multiple workspaces (Business+), owner/admin/staff roles, invite links, workspace switching |
+| Instagram & Messenger | Official Meta OAuth (Facebook Login for Business), Page + linked Instagram professional account selection, webhook subscription, signed webhook ingestion (`X-Hub-Signature-256`), DMs, story replies/mentions, post & Reel comments, private replies, public comment replies, 24-hour window + `HUMAN_AGENT` tag enforcement |
+| Automation builder | Drag-and-drop flow editor (React Flow) with triggers (DM keyword, comment keyword, story reply, new conversation) and steps: send message, ask question (waits for reply), condition (Yes/No), delay, tags, custom fields, lead score, pipeline stage, AI reply, notify team, human handoff, webhook, end. Validation, test-mode simulator, per-run step logs |
+| Templates | 10 installable templates (Comment-to-DM, Welcome bot, AI support, Lead qualification, Booking funnel, Story reply, Real estate, Church visitor, Restaurant, Product launch) |
+| AI chatbot | OpenAI-powered assistant with name, tone, personality, objective, booking link, language, handoff keywords; knowledge base (FAQ/text/pricing/policy, .txt/.md upload, web page import); guardrails against invented prices/discounts; handoff when unsure; live preview |
+| Unified inbox | Instagram + Messenger threads, assignment, status, priority, labels, internal notes, saved replies, AI-suggested replies, human takeover (pauses bots), delivery errors surfaced per message |
+| CRM | Contacts with tags, custom fields, notes, activity timeline, owner, lead score → Hot/Warm/Cold, pipeline stages (Kanban drag & drop), search/filters, CSV import (dedupes by email) & export, duplicate detection + merge, per-contact JSON data export and deletion |
+| Analytics | Contacts, new leads, active conversations, automated/AI messages, response rate, workflow completion, lead sources, daily volume chart, 7/30/90-day ranges, CSV report |
+| Billing | Stripe Checkout + Billing Portal, signed webhook syncing plan/status, plan limits (contacts, active automations, monthly runs, AI replies, seats) and usage meters |
+| Demo mode | Clearly labelled sample contacts/conversations; demo messages are never sent externally; "send as customer" to see automations/AI respond |
+
+Phase 2/3 items (email, SMS, booking, landing pages, campaigns, WhatsApp, TikTok, e-commerce, agency/white-label) appear in the navigation as **Coming soon** and are not simulated.
+
+## Stack
+
+Next.js 16 (App Router, Server Actions) · React 19 · TypeScript · Tailwind CSS v4 with shadcn-style components · PostgreSQL + Drizzle ORM · OpenAI · Stripe · React Flow · Recharts · Vitest
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env          # fill in values (see below)
+npm install
+npm run db:migrate            # applies drizzle/ migrations to DATABASE_URL
+npm run dev                   # http://localhost:3000
+npm test                      # unit tests (engine, webhook parsing, crypto, CSV, AI prompt)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Needed for |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection |
+| `APP_URL` | Public base URL for OAuth redirects, Stripe return URLs and the webhook URL |
+| `ENCRYPTION_KEY` | 32-byte base64 key (`openssl rand -base64 32`). Encrypts Page tokens and API keys (AES-256-GCM) |
+| `CRON_SECRET` | Protects `/api/cron/automations` |
+| `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_GRAPH_VERSION` | Instagram & Messenger |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | Platform AI key (workspaces can also add their own on the Integrations page) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_AGENCY` | Paid plans |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The app runs without the optional integrations: each screen says exactly what is missing, and nothing is reported as connected until a real account is linked.
 
-## Learn More
+### Meta app setup (Instagram + Messenger)
 
-To learn more about Next.js, take a look at the following resources:
+1. Create a **Business** app at developers.facebook.com. Add **Facebook Login for Business**, **Messenger** and **Instagram** (Instagram API with Facebook Login).
+2. Valid OAuth redirect URI: `${APP_URL}/api/integrations/meta/callback`.
+3. Webhooks: callback `${APP_URL}/api/webhooks/meta`, verify token = `META_WEBHOOK_VERIFY_TOKEN`.
+   - **Page** object: `messages`, `messaging_postbacks`, `feed`
+   - **Instagram** object: `messages`, `messaging_postbacks`, `comments`
+4. Permissions used: `pages_show_list, pages_manage_metadata, pages_messaging, pages_read_engagement, pages_manage_engagement, instagram_basic, instagram_manage_messages, instagram_manage_comments, business_management`. Accounts that aren't app testers need **Advanced Access** via App Review. Use `/privacy`, `/terms` and `/data-deletion` (templates, have them reviewed) for the review.
+5. The Instagram account must be a professional account linked to the Facebook Page, with *Allow access to messages* enabled.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Stripe setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create four recurring prices, put their ids in `STRIPE_PRICE_*`, enable the Billing Portal, and add a webhook endpoint at `${APP_URL}/api/webhooks/stripe` for `checkout.session.completed` and `customer.subscription.created|updated|deleted`.
 
-## Deploy on Vercel
+### Scheduler
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Delays and question time-outs are resumed by `GET /api/cron/automations` with `Authorization: Bearer $CRON_SECRET`. Call it every minute (`vercel.json` includes a cron entry; Vercel Hobby only allows daily crons, so use Pro or an external scheduler).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture notes
+
+- **Workspace isolation**: every query is scoped by `workspace_id` taken from the server-side session (`requireWorkspace`); roles are checked server-side for every mutation.
+- **Webhooks** are verified, acknowledged immediately, and processed with `after()`. Inbound messages are de-duplicated by a unique `(conversation_id, external_id)` index; comments and Stripe events via `webhook_events`.
+- **Automation engine** (`src/lib/engine`): a pure executor (`executor.ts`, unit-tested with fake side effects) and a runtime that wires DB/Meta/AI and persists run state (`waiting` for a reply or timer). For higher volume, move `processDueRuns` and webhook processing to a queue/worker (Trigger.dev, Temporal or BullMQ on Redis); the executor is designed to drop into either.
+- **Rate limiting** is in-memory (`src/lib/rate-limit.ts`); swap in Redis when running more than one instance.
+- **Audit log** records sign-ins, integration changes, exports, deletions, role changes and billing events.

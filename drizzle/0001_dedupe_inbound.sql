@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "messages_conv_external_idx" ON "messages" USING btree ("conversation_id","external_id");
