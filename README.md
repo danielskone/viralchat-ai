@@ -30,6 +30,8 @@ Next.js 16 (App Router, Server Actions) · React 19 · TypeScript · Tailwind CS
 cp .env.example .env          # fill in values (see below)
 npm install
 npm run db:migrate            # applies drizzle/ migrations to DATABASE_URL
+
+> On Vercel, the `vercel-build` script runs `drizzle-kit migrate` automatically before `next build` whenever `DATABASE_URL` is set, so every deploy applies pending migrations.
 npm run dev                   # http://localhost:3000
 npm test                      # unit tests (engine, webhook parsing, crypto, CSV, AI prompt)
 ```
