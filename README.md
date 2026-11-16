@@ -64,7 +64,7 @@ Create four recurring prices, put their ids in `STRIPE_PRICE_*`, enable the Bill
 
 ### Scheduler
 
-Delays and question time-outs are resumed by `GET /api/cron/automations` with `Authorization: Bearer $CRON_SECRET`. Call it every minute (`vercel.json` includes a cron entry; Vercel Hobby only allows daily crons, so use Pro or an external scheduler).
+Delays and question time-outs are resumed by `GET /api/cron/automations` with `Authorization: Bearer $CRON_SECRET`. Call it every minute. `vercel.json` ships a once-a-day entry because Vercel's Hobby plan rejects more frequent crons; on Vercel Pro change it to `* * * * *`, or point an external scheduler (e.g. cron-job.org) at the endpoint every minute.
 
 ## Architecture notes
 
