@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "if [ -n \"$DATABASE_URL\" ]; then drizzle-kit migrate; fi && next build",
+    "vercel-build": "if [ -n \"$DATABASE_URL$STORAGE_URL$POSTGRES_URL\" ]; then drizzle-kit migrate; fi && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

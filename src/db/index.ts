@@ -8,11 +8,16 @@ const globalForDb = globalThis as unknown as { __viralchatDb?: DB };
 
 function getDb(): DB {
   if (!globalForDb.__viralchatDb) {
-    const url = process.env.DATABASE_URL;
+    // Vercel's Neon integration may name the variable with a custom prefix (e.g. STORAGE_URL).
+    const url = process.env.DATABASE_URL ?? process.env.STORAGE_URL ?? process.env.POSTGRES_URL;
     if (!url) {
       throw new Error("DATABASE_URL is not set. Copy .env.example to .env and configure Postgres.");
     }
-    const client = postgres(url, { max: Number(process.env.DATABASE_POOL_SIZE ?? 10) });
+    const client = postgres(url, {
+      max: Number(process.env.DATABASE_POOL_SIZE ?? 10),
+      // Pooled connections (PgBouncer transaction mode, e.g. Neon "-pooler" hosts) can't use prepared statements.
+      prepare: !url.includes("-pooler"),
+    });
     globalForDb.__viralchatDb = drizzle(client, { schema });
   }
   return globalForDb.__viralchatDb;
