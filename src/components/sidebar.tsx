@@ -26,6 +26,7 @@ export function Sidebar({ unread }: { unread: number }) {
         { href: "/booking", label: "Booking", icon: CalendarDays },
         { href: "/pages", label: "Landing Pages", icon: PanelsTopLeft },
         { href: "/broadcasts", label: "Broadcasts", icon: Megaphone },
+        { href: "/email", label: "Email Follow-ups", icon: Mail },
         { href: "/templates", label: "Templates", icon: LayoutTemplate },
         { href: "/analytics", label: "Analytics", icon: BarChart3 },
         { href: "/integrations", label: "Integrations", icon: Plug },
@@ -34,7 +35,6 @@ export function Sidebar({ unread }: { unread: number }) {
     {
       title: "Coming soon",
       items: [
-        { href: "/roadmap/email", label: "Email Marketing", icon: Mail, soon: true },
         { href: "/roadmap/sms", label: "SMS Marketing", icon: MessageSquareText, soon: true },
       ],
     },

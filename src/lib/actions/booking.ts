@@ -15,6 +15,7 @@ import {
   openSlots,
   readContactToken,
 } from "@/lib/booking-server";
+import { enrollContact } from "@/lib/email-server";
 import { interpolate } from "@/lib/engine/matcher";
 import { sendMessage } from "@/lib/messaging";
 import { stageLabel } from "@/lib/utils";
@@ -178,6 +179,8 @@ export async function createPublicBooking(_: PublicBookingState, form: FormData)
   await logActivity(page.workspaceId, contactId, "booking", `Booked an appointment for ${when}${page.stageOnBooking ? ` · stage → ${stageLabel(page.stageOnBooking)}` : ""}`);
   await notifyMembers(page.workspaceId, "New appointment booked", `${d.name} booked ${when}`, `/booking`);
   await audit(page.workspaceId, null, "booking.create", bookingId);
+
+  await enrollContact(page.workspaceId, contactId, "booking_created").catch(() => undefined);
 
   // Best-effort DM confirmation in the conversation the link came from.
   if (page.confirmationMessage && contact) {

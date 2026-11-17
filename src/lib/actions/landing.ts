@@ -9,6 +9,7 @@ import { requireWorkspace } from "@/lib/auth";
 import { audit, logActivity } from "@/lib/audit";
 import { slugify } from "@/lib/booking";
 import { bookingLinkFor, notifyMembers } from "@/lib/booking-server";
+import { enrollContact } from "@/lib/email-server";
 import { interpolate } from "@/lib/engine/matcher";
 import { stageLabel } from "@/lib/utils";
 
@@ -185,6 +186,7 @@ export async function submitLeadForm(_: LeadFormState, form: FormData): Promise<
   await notifyMembers(page.workspaceId, "New lead from your page", `${d.name} filled in "${page.title}"`, `/pages/${page.id}`);
   await audit(page.workspaceId, null, "landing.submit", page.id);
 
+  await enrollContact(page.workspaceId, contactId, "form_submitted", page.id).catch(() => undefined);
   const next = page.afterSubmit === "booking" ? await bookingLinkFor(page.workspaceId, contactId) : "";
   revalidatePath(`/pages/${page.id}`);
   return { done: { message: thanks, next: next || undefined } };

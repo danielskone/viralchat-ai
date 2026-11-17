@@ -20,7 +20,7 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 export const roleEnum = pgEnum("role", ["owner", "admin", "staff"]);
 export const planEnum = pgEnum("plan", ["free", "starter", "professional", "business", "agency"]);
 export const channelEnum = pgEnum("channel", ["instagram", "messenger", "demo", "test"]);
-export const providerEnum = pgEnum("provider", ["meta", "openai"]);
+export const providerEnum = pgEnum("provider", ["meta", "openai", "resend"]);
 export const integrationStatusEnum = pgEnum("integration_status", ["disconnected", "connected", "error"]);
 export const leadTempEnum = pgEnum("lead_temperature", ["hot", "warm", "cold"]);
 export const conversationStatusEnum = pgEnum("conversation_status", ["open", "pending", "closed"]);
@@ -124,6 +124,8 @@ export const integrations = pgTable(
     instagramUsername: text("instagram_username"),
     // AES-256-GCM encrypted secrets (page access token, API key…)
     secretEnc: text("secret_enc"),
+    // Non-secret provider settings (e.g. email sender name/address)
+    config: jsonb("config").$type<Record<string, string>>(),
     scopes: text("scopes").array(),
     lastError: text("last_error"),
     connectedAt: timestamp("connected_at", { withTimezone: true }),
@@ -177,6 +179,7 @@ export const contacts = pgTable(
     messengerId: text("messenger_id"),
     instagramUsername: text("instagram_username"),
     optedOut: boolean("opted_out").notNull().default(false),
+    emailOptedOut: boolean("email_opted_out").notNull().default(false),
     isDemo: boolean("is_demo").notNull().default(false),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
@@ -584,6 +587,73 @@ export const broadcastRecipients = pgTable(
   (t) => [index("broadcast_recipients_b_idx").on(t.broadcastId), uniqueIndex("broadcast_recipients_conv_idx").on(t.broadcastId, t.conversationId)],
 );
 
+// ───────────────────────── Email follow-ups ─────────────────────────
+
+export type EmailStep = { delayDays: number; subject: string; body: string };
+
+export const emailSequences = pgTable(
+  "email_sequences",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    trigger: text("trigger").notNull().default("form_submitted"), // form_submitted | booking_created
+    pageId: uuid("page_id").references(() => landingPages.id, { onDelete: "set null" }), // form_submitted: only this page (null = any)
+    active: boolean("active").notNull().default(false),
+    steps: jsonb("steps").$type<EmailStep[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("email_sequences_ws_idx").on(t.workspaceId)],
+);
+
+export const emailEnrollments = pgTable(
+  "email_enrollments",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sequenceId: uuid("sequence_id")
+      .notNull()
+      .references(() => emailSequences.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    nextStep: integer("next_step").notNull().default(0),
+    nextAt: timestamp("next_at", { withTimezone: true }),
+    status: text("status").notNull().default("active"), // active | completed | stopped | failed
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("email_enrollments_seq_contact_idx").on(t.sequenceId, t.contactId),
+    index("email_enrollments_due_idx").on(t.status, t.nextAt),
+  ],
+);
+
+export const emailMessages = pgTable(
+  "email_messages",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    sequenceId: uuid("sequence_id").references(() => emailSequences.id, { onDelete: "set null" }),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    status: text("status").notNull(), // sent | failed
+    error: text("error"),
+    providerId: text("provider_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("email_messages_ws_idx").on(t.workspaceId, t.createdAt), index("email_messages_contact_idx").on(t.contactId)],
+);
+
 // ───────────────────────── Ops ─────────────────────────
 
 export const notifications = pgTable(
@@ -633,4 +703,5 @@ export type Booking = typeof bookings.$inferSelect;
 export type LandingPage = typeof landingPages.$inferSelect;
 export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type Broadcast = typeof broadcasts.$inferSelect;
+export type EmailSequence = typeof emailSequences.$inferSelect;
 export type Channel = (typeof channelEnum.enumValues)[number];

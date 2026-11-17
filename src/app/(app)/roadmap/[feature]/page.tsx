@@ -6,7 +6,6 @@ import { Card, CardContent } from "@/components/ui/primitives";
 import { buttonVariants } from "@/components/ui/button";
 
 const FEATURES: Record<string, { title: string; phase: string; points: string[] }> = {
-  email: { title: "Email Marketing", phase: "Phase 2", points: ["Brevo, SendGrid or Amazon SES delivery", "Drag-and-drop email builder and AI copy", "Drip sequences, unsubscribe management, open/click tracking"] },
   sms: { title: "SMS Marketing", phase: "Phase 2", points: ["Twilio two-way messaging", "STOP keyword processing, consent records and quiet hours", "Reminders, confirmations and follow-up sequences"] },
 };
 
@@ -16,6 +15,7 @@ export default async function RoadmapPage({ params }: PageProps<"/roadmap/[featu
   if (feature === "booking") redirect("/booking");
   if (feature === "landing-pages") redirect("/pages");
   if (feature === "campaigns") redirect("/broadcasts");
+  if (feature === "email") redirect("/email");
   const f = FEATURES[feature];
   if (!f) notFound();
   return (
