@@ -497,6 +497,52 @@ export const bookings = pgTable(
   ],
 );
 
+// ───────────────────────── Landing pages & forms ─────────────────────────
+
+export type LandingFields = { phone: boolean; phoneRequired: boolean; message: boolean };
+
+export const landingPages = pgTable(
+  "landing_pages",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    title: text("title").notNull().default("Untitled page"),
+    headline: text("headline").notNull().default(""),
+    subheadline: text("subheadline"),
+    body: text("body"),
+    imageUrl: text("image_url"),
+    buttonText: text("button_text").notNull().default("Send"),
+    fields: jsonb("fields").$type<LandingFields>().notNull().default({ phone: true, phoneRequired: false, message: false }),
+    afterSubmit: text("after_submit").notNull().default("message"), // message | booking
+    successMessage: text("success_message"),
+    tagOnSubmit: text("tag_on_submit"),
+    stageOnSubmit: text("stage_on_submit"),
+    published: boolean("published").notNull().default(false),
+    submissions: integer("submissions").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("landing_pages_ws_idx").on(t.workspaceId), uniqueIndex("landing_pages_slug_idx").on(t.slug)],
+);
+
+export const formSubmissions = pgTable(
+  "form_submissions",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id").references(() => landingPages.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    data: jsonb("data").$type<Record<string, string>>().notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [index("form_submissions_page_idx").on(t.pageId, t.createdAt), index("form_submissions_ws_idx").on(t.workspaceId, t.createdAt)],
+);
+
 // ───────────────────────── Ops ─────────────────────────
 
 export const notifications = pgTable(
@@ -543,4 +589,6 @@ export type Role = (typeof roleEnum.enumValues)[number];
 export type Plan = (typeof planEnum.enumValues)[number];
 export type BookingPage = typeof bookingPages.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
+export type LandingPage = typeof landingPages.$inferSelect;
+export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type Channel = (typeof channelEnum.enumValues)[number];

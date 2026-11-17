@@ -24,6 +24,7 @@ export function Sidebar({ unread }: { unread: number }) {
         { href: "/chatbot", label: "AI Chatbot", icon: Bot },
         { href: "/automations", label: "Automations", icon: Workflow },
         { href: "/booking", label: "Booking", icon: CalendarDays },
+        { href: "/pages", label: "Landing Pages", icon: PanelsTopLeft },
         { href: "/templates", label: "Templates", icon: LayoutTemplate },
         { href: "/analytics", label: "Analytics", icon: BarChart3 },
         { href: "/integrations", label: "Integrations", icon: Plug },
@@ -35,7 +36,6 @@ export function Sidebar({ unread }: { unread: number }) {
         { href: "/roadmap/campaigns", label: "Campaigns", icon: Megaphone, soon: true },
         { href: "/roadmap/email", label: "Email Marketing", icon: Mail, soon: true },
         { href: "/roadmap/sms", label: "SMS Marketing", icon: MessageSquareText, soon: true },
-        { href: "/roadmap/landing-pages", label: "Landing Pages", icon: PanelsTopLeft, soon: true },
       ],
     },
     {
