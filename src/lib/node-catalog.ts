@@ -17,7 +17,7 @@ export type NodeSpec = {
 };
 
 const s = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String(v));
-const VARS_HINT = "Variables: {{first_name}}, {{name}}, {{email}}, {{field.your_field}}";
+const VARS_HINT = "Variables: {{first_name}}, {{name}}, {{email}}, {{booking_link}}, {{field.your_field}}";
 
 export const NODE_SPECS: NodeSpec[] = [
   {

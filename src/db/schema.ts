@@ -441,6 +441,62 @@ export const knowledgeItems = pgTable(
   (t) => [index("knowledge_ws_idx").on(t.workspaceId)],
 );
 
+// ───────────────────────── Booking ─────────────────────────
+
+/** Weekly opening hours, local to the booking page's time zone. Keys 0–6 = Sunday–Saturday. */
+export type WeeklyHours = Record<string, { start: string; end: string }[]>;
+
+export const bookingPages = pgTable(
+  "booking_pages",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    title: text("title").notNull().default("Book a call"),
+    description: text("description"),
+    durationMinutes: integer("duration_minutes").notNull().default(30),
+    bufferMinutes: integer("buffer_minutes").notNull().default(0),
+    minNoticeHours: integer("min_notice_hours").notNull().default(2),
+    maxDaysAhead: integer("max_days_ahead").notNull().default(30),
+    timezone: text("timezone").notNull().default("UTC"),
+    weeklyHours: jsonb("weekly_hours").$type<WeeklyHours>().notNull().default({}),
+    confirmationMessage: text("confirmation_message"),
+    tagOnBooking: text("tag_on_booking").default("booked"),
+    stageOnBooking: text("stage_on_booking"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("booking_pages_ws_idx").on(t.workspaceId), uniqueIndex("booking_pages_slug_idx").on(t.slug)],
+);
+
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    notes: text("notes"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("confirmed"), // confirmed | cancelled
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("bookings_ws_start_idx").on(t.workspaceId, t.startsAt),
+    index("bookings_contact_idx").on(t.contactId),
+    // Two confirmed bookings can't start at the same moment (guards against double-booking races).
+    uniqueIndex("bookings_ws_slot_idx").on(t.workspaceId, t.startsAt).where(sql`status = 'confirmed'`),
+  ],
+);
+
 // ───────────────────────── Ops ─────────────────────────
 
 export const notifications = pgTable(
@@ -485,4 +541,6 @@ export type Chatbot = typeof chatbots.$inferSelect;
 export type Integration = typeof integrations.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type Plan = (typeof planEnum.enumValues)[number];
+export type BookingPage = typeof bookingPages.$inferSelect;
+export type Booking = typeof bookings.$inferSelect;
 export type Channel = (typeof channelEnum.enumValues)[number];

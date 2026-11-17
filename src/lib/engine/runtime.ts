@@ -23,6 +23,7 @@ import { logActivity } from "@/lib/audit";
 import { temperatureFromScore } from "@/lib/utils";
 import { execute, findTrigger, type ExecDeps, type RunState } from "./executor";
 import { matchKeyword } from "./matcher";
+import { bookingLinkFor } from "@/lib/booking-server";
 
 function monthStart() {
   const d = new Date();
@@ -81,6 +82,7 @@ function buildDeps(run: { id: string; isTest: boolean; context: Record<string, u
         email: c.email ?? "",
         phone: c.phone ?? "",
         username: c.instagramUsername ?? "",
+        booking_link: await bookingLinkFor(c.workspaceId, c.id),
       };
       for (const [k, v] of Object.entries(c.customFields ?? {})) vars[`field.${k}`] = v;
       return vars;

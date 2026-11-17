@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Rocket } from "lucide-react";
 import { requireWorkspace } from "@/lib/auth";
@@ -9,13 +9,13 @@ const FEATURES: Record<string, { title: string; phase: string; points: string[] 
   campaigns: { title: "Campaigns", phase: "Phase 2", points: ["Audience segments from tags, stages and scores", "Scheduling and A/B tests", "Conversion tracking per campaign"] },
   email: { title: "Email Marketing", phase: "Phase 2", points: ["Brevo, SendGrid or Amazon SES delivery", "Drag-and-drop email builder and AI copy", "Drip sequences, unsubscribe management, open/click tracking"] },
   sms: { title: "SMS Marketing", phase: "Phase 2", points: ["Twilio two-way messaging", "STOP keyword processing, consent records and quiet hours", "Reminders, confirmations and follow-up sequences"] },
-  booking: { title: "Appointment Booking", phase: "Phase 2", points: ["Google Calendar and Outlook sync", "Booking pages, reminders, rescheduling", "AI-guided booking inside DMs"] },
   "landing-pages": { title: "Landing Pages & Forms", phase: "Phase 2", points: ["Drag-and-drop page and form builder", "Custom domains", "Form submissions trigger automations"] },
 };
 
 export default async function RoadmapPage({ params }: PageProps<"/roadmap/[feature]">) {
   await requireWorkspace();
   const { feature } = await params;
+  if (feature === "booking") redirect("/booking");
   const f = FEATURES[feature];
   if (!f) notFound();
   return (
