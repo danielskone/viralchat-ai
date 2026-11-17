@@ -8,6 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: { default: "ViralChat AI — Turn Conversations Into Customers", template: "%s · ViralChat AI" },
   description: "AI-powered Instagram and Messenger automation, inbox, and CRM for growing businesses.",
+  appleWebApp: { capable: true, title: "ViralChat", statusBarStyle: "default" },
 };
 
 const themeScript = `(function(){try{var t=localStorage.getItem('vc-theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark')}catch(e){}})()`;
