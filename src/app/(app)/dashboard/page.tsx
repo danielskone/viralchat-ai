@@ -60,6 +60,7 @@ export default async function DashboardPage() {
                 <div className="brand-gradient h-2 rounded-full" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
               </div>
               <p className="mt-3 text-sm text-muted-foreground">Finish setup to start turning comments and DMs into leads.</p>
+              <Link href="/tutorial" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">Open the full tutorial <ArrowRight className="size-3.5" /></Link>
             </div>
             <ol className="grid flex-1 gap-1 sm:grid-cols-2">
               {steps.map((s) => (

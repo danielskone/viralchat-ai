@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, MessagesSquare, Users, KanbanSquare, Bot, Workflow, Megaphone, Mail, MessageSquareText,
-  CalendarDays, PanelsTopLeft, BarChart3, Plug, LayoutTemplate, UsersRound, CreditCard, Settings, Menu, X,
+  CalendarDays, PanelsTopLeft, GraduationCap, BarChart3, Plug, LayoutTemplate, UsersRound, CreditCard, Settings, Menu, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
@@ -18,6 +18,7 @@ export function Sidebar({ unread }: { unread: number }) {
     {
       items: [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/tutorial", label: "Tutorial", icon: GraduationCap },
         { href: "/inbox", label: "Conversations", icon: MessagesSquare, badge: unread },
         { href: "/contacts", label: "Contacts", icon: Users },
         { href: "/pipeline", label: "CRM Pipeline", icon: KanbanSquare },
