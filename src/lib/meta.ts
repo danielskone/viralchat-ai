@@ -61,7 +61,10 @@ export function buildAuthUrl(state: string) {
   u.searchParams.set("redirect_uri", cfg.redirectUri);
   u.searchParams.set("state", state);
   u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", META_SCOPES.join(","));
+  // Business-type apps using "Facebook Login for Business" can supply a login configuration id instead of scopes.
+  const configId = process.env.META_LOGIN_CONFIG_ID;
+  if (configId) u.searchParams.set("config_id", configId);
+  else u.searchParams.set("scope", META_SCOPES.join(","));
   return u.toString();
 }
 
