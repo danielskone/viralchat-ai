@@ -543,6 +543,47 @@ export const formSubmissions = pgTable(
   (t) => [index("form_submissions_page_idx").on(t.pageId, t.createdAt), index("form_submissions_ws_idx").on(t.workspaceId, t.createdAt)],
 );
 
+// ───────────────────────── Broadcasts ─────────────────────────
+
+export type BroadcastAudience = { channel: "all" | "instagram" | "messenger"; tag?: string | null; stage?: string | null };
+
+export const broadcasts = pgTable(
+  "broadcasts",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    message: text("message").notNull().default(""),
+    audience: jsonb("audience").$type<BroadcastAudience>().notNull().default({ channel: "all" }),
+    status: text("status").notNull().default("draft"), // draft | sending | sent
+    sentCount: integer("sent_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("broadcasts_ws_idx").on(t.workspaceId, t.createdAt)],
+);
+
+export const broadcastRecipients = pgTable(
+  "broadcast_recipients",
+  {
+    id: id(),
+    broadcastId: uuid("broadcast_id")
+      .notNull()
+      .references(() => broadcasts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    status: text("status").notNull(), // sent | failed
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("broadcast_recipients_b_idx").on(t.broadcastId), uniqueIndex("broadcast_recipients_conv_idx").on(t.broadcastId, t.conversationId)],
+);
+
 // ───────────────────────── Ops ─────────────────────────
 
 export const notifications = pgTable(
@@ -591,4 +632,5 @@ export type BookingPage = typeof bookingPages.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type LandingPage = typeof landingPages.$inferSelect;
 export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type Broadcast = typeof broadcasts.$inferSelect;
 export type Channel = (typeof channelEnum.enumValues)[number];
