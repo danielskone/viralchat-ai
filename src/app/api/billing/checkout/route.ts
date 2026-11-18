@@ -1,28 +1,27 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { workspaces, type Plan } from "@/db/schema";
+import { workspaces } from "@/db/schema";
 import { getWorkspaceContext, hasRole } from "@/lib/auth";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
-import { priceIdFor, PLANS } from "@/lib/plans";
+import { BASE_PLAN, TRIAL_DAYS, hasAccess, priceIdFor } from "@/lib/plans";
 import { audit } from "@/lib/audit";
 
+/** Starts the base-plan subscription (with the free trial the first time) in Stripe Checkout. */
 export async function POST(req: Request) {
   const ctx = await getWorkspaceContext();
   if (!ctx) return NextResponse.redirect(new URL("/login", req.url), 303);
-  const back = (q: string) => NextResponse.redirect(new URL(`/billing?${q}`, req.url), 303);
-  if (!hasRole(ctx.role, "owner")) return back("error=Only%20the%20workspace%20owner%20can%20change%20billing");
-  if (!stripeConfigured()) return back("error=Stripe%20is%20not%20configured%20on%20the%20server");
-  const form = await req.formData();
-  const plan = String(form.get("plan")) as Plan;
-  if (!PLANS.some((p) => p.id === plan) || plan === "free") return back("error=Unknown%20plan");
-  const price = priceIdFor(plan);
-  if (!price) return back(`error=${encodeURIComponent(`Missing Stripe price id for ${plan} (STRIPE_PRICE_${plan.toUpperCase()})`)}`);
+  const page = hasAccess(ctx.workspace) ? "/billing" : "/subscribe";
+  const back = (msg: string) => NextResponse.redirect(new URL(`${page}?error=${encodeURIComponent(msg)}`, req.url), 303);
+  if (!hasRole(ctx.role, "owner")) return back("Only the workspace owner can manage billing.");
+  if (!stripeConfigured()) return back("Payments are not set up yet.");
+  const price = priceIdFor(BASE_PLAN.id);
+  if (!price) return back(`Missing Stripe price id (${BASE_PLAN.stripePriceEnv}).`);
 
   const stripe = getStripe();
   const appUrl = process.env.APP_URL ?? new URL(req.url).origin;
 
-  // Existing subscribers change plans through the billing portal to get proration right.
+  // Existing subscribers manage their plan, card and cancellation in the billing portal.
   if (ctx.workspace.stripeSubscriptionId && ctx.workspace.stripeCustomerId) {
     const portal = await stripe.billingPortal.sessions.create({ customer: ctx.workspace.stripeCustomerId, return_url: `${appUrl}/billing` });
     return NextResponse.redirect(portal.url, 303);
@@ -34,16 +33,22 @@ export async function POST(req: Request) {
     customerId = customer.id;
     await db.update(workspaces).set({ stripeCustomerId: customerId }).where(eq(workspaces.id, ctx.workspace.id));
   }
+  // One free trial per workspace.
+  const trial = !ctx.workspace.trialEndsAt;
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price, quantity: 1 }],
     client_reference_id: ctx.workspace.id,
-    subscription_data: { metadata: { workspaceId: ctx.workspace.id } },
+    payment_method_collection: "always",
+    subscription_data: {
+      metadata: { workspaceId: ctx.workspace.id },
+      ...(trial ? { trial_period_days: TRIAL_DAYS, trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
+    },
     allow_promotion_codes: true,
-    success_url: `${appUrl}/billing?success=1`,
-    cancel_url: `${appUrl}/billing?canceled=1`,
+    success_url: `${appUrl}/api/billing/return?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}${page}?canceled=1`,
   });
-  await audit(ctx.workspace.id, ctx.user.id, "billing.checkout_started", plan);
+  await audit(ctx.workspace.id, ctx.user.id, "billing.checkout_started", trial ? "trial" : BASE_PLAN.id);
   return NextResponse.redirect(session.url!, 303);
 }

@@ -1,13 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, eq, isNull, sum, count } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, notifications } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
+import { hasAccess } from "@/lib/plans";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const ctx = await requireWorkspace();
+  // The app is for paying (or trialing) workspaces; everyone else starts their trial first.
+  if (!hasAccess(ctx.workspace)) redirect("/subscribe");
   const [[unread], [notif]] = await Promise.all([
     db.select({ n: sum(conversations.unreadCount) }).from(conversations).where(eq(conversations.workspaceId, ctx.workspace.id)),
     db

@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { chatbots, knowledgeItems, workspaces } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
 import { previewReply } from "@/lib/ai";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 import { audit } from "@/lib/audit";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -31,7 +31,7 @@ export async function saveChatbot(_: FormState, form: FormData): Promise<FormSta
   const enabled = form.get("enabled") === "on";
   if (enabled) {
     const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, ctx.workspace.id)).limit(1);
-    if (!getPlan(ws?.plan).limits.aiChatbot) return { error: "The AI chatbot is available on the Professional plan and above. Upgrade on the Billing page." };
+    if (!workspacePlan(ws).limits.aiChatbot) return { error: "The AI chatbot needs an active subscription. Start your free trial on the Billing page." };
   }
   const channels = form.getAll("channels").map(String).filter((c) => c === "instagram" || c === "messenger");
   const d = parsed.data;

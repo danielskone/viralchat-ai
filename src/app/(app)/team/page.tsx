@@ -2,7 +2,7 @@ import { and, eq, isNull, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { invitations, memberships, users } from "@/db/schema";
 import { requireWorkspace, hasRole } from "@/lib/auth";
-import { getPlan, formatLimit } from "@/lib/plans";
+import { workspacePlan, formatLimit } from "@/lib/plans";
 import { Avatar, Badge, Card, CardContent, CardHeader, CardTitle, CardDescription, PageHeader, Select } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { changeRole, removeMember, revokeInvite } from "@/lib/actions/team";
@@ -24,7 +24,7 @@ export default async function TeamPage() {
   ]);
   const isAdmin = hasRole(ctx.role, "admin");
   const isOwner = ctx.role === "owner";
-  const limit = getPlan(ctx.workspace.plan).limits.members;
+  const limit = workspacePlan(ctx.workspace).limits.members;
   return (
     <>
       <PageHeader title="Team" description={`${members.length} of ${formatLimit(limit)} seats used. Owners manage billing; admins manage integrations and automations; staff work the inbox and CRM.`} />

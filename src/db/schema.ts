@@ -18,7 +18,7 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
 export const roleEnum = pgEnum("role", ["owner", "admin", "staff"]);
-export const planEnum = pgEnum("plan", ["free", "starter", "professional", "business", "agency"]);
+export const planEnum = pgEnum("plan", ["free", "starter", "professional", "business", "agency", "pro"]);
 export const channelEnum = pgEnum("channel", ["instagram", "messenger", "demo", "test"]);
 export const providerEnum = pgEnum("provider", ["meta", "openai", "resend"]);
 export const integrationStatusEnum = pgEnum("integration_status", ["disconnected", "connected", "error"]);
@@ -71,6 +71,12 @@ export const workspaces = pgTable("workspaces", {
   stripeSubscriptionId: text("stripe_subscription_id").unique(),
   subscriptionStatus: text("subscription_status"),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  /** When the free trial ends (or ended). Set once, so a workspace only gets one trial. */
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  /** Ids of add-ons (see ADDONS in lib/plans) active on the subscription. */
+  addons: text("addons").array().notNull().default([]),
+  /** Full access without a subscription (beta testers and workspaces created before billing). */
+  billingExempt: boolean("billing_exempt").notNull().default(false),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   demoMode: boolean("demo_mode").notNull().default(false),
   createdAt: createdAt(),

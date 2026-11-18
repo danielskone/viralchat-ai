@@ -23,7 +23,7 @@ export default async function MarketingLayout({ children }: LayoutProps<"/">) {
           ) : (
             <>
               <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>Sign in</Link>
-              <Link href="/signup" className={buttonVariants({ variant: "gradient", size: "sm" })}>Start free</Link>
+              <Link href="/signup" className={buttonVariants({ variant: "gradient", size: "sm" })}>Start free trial</Link>
             </>
           )}
         </div>
