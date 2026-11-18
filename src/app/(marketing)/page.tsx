@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Bot, Workflow, MessagesSquare, Users, BarChart3, ShieldCheck, Check, Sparkles, ArrowRight } from "lucide-react";
+import { Bot, Workflow, MessagesSquare, Users, BarChart3, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/primitives";
-import { PLANS } from "@/lib/plans";
+import { BASE_PLAN, TRIAL_DAYS } from "@/lib/plans";
+import { PlanCard } from "@/components/billing/plan-card";
 import { InstagramIcon, MessengerIcon } from "@/components/brand-icons";
 
 const FEATURES = [
@@ -31,7 +32,7 @@ export default function Home() {
               ViralChat AI replies to Instagram comments and DMs, qualifies leads with AI, and drops them into your CRM, so you can grow without living in your inbox.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/signup" className={buttonVariants({ variant: "gradient", size: "lg" })}>Start free <ArrowRight /></Link>
+              <Link href="/signup" className={buttonVariants({ variant: "gradient", size: "lg" })}>Start free trial <ArrowRight /></Link>
               <a href="#how" className={buttonVariants({ variant: "outline", size: "lg" })}>See how it works</a>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">Free plan · No credit card · Works with Instagram professional accounts and Facebook Pages</p>
@@ -97,20 +98,13 @@ export default function Home() {
       </section>
 
       <section id="pricing" className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="text-center text-3xl font-semibold tracking-tight">Simple pricing that grows with you</h2>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
-          {PLANS.map((p) => (
-            <Card key={p.id} className={`flex flex-col p-5 ${p.id === "professional" ? "ring-2 ring-primary" : ""}`}>
-              <p className="font-semibold">{p.name}</p>
-              <p className="mt-2 text-3xl font-semibold">${p.priceMonthly}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
-              <p className="text-sm text-muted-foreground">{p.tagline}</p>
-              <ul className="my-4 flex flex-1 flex-col gap-1.5 text-sm">
-                {p.features.map((f) => <li key={f} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-success" />{f}</li>)}
-              </ul>
-              <Link href="/signup" className={buttonVariants({ variant: p.id === "professional" ? "gradient" : "outline" })}>Get started</Link>
-            </Card>
-          ))}
-        </div>
+        <h2 className="text-center text-3xl font-semibold tracking-tight">One simple plan</h2>
+        <p className="mx-auto mt-3 max-w-xl text-center text-muted-foreground">
+          Everything included for ${BASE_PLAN.priceMonthly}/month. Try it free for {TRIAL_DAYS} days and cancel anytime.
+        </p>
+        <PlanCard className="mx-auto mt-10 w-full max-w-md">
+          <Link href="/signup" className={buttonVariants({ variant: "gradient", size: "lg" })}>Start your {TRIAL_DAYS}-day free trial</Link>
+        </PlanCard>
       </section>
     </>
   );

@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { invitations, memberships, users, workspaces } from "@/db/schema";
 import { requireUser, requireWorkspace, setCurrentWorkspace } from "@/lib/auth";
 import { randomToken, sha256 } from "@/lib/crypto";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 import { audit } from "@/lib/audit";
 
 export type InviteState = { error?: string; link?: string } | undefined;
@@ -17,7 +17,7 @@ export async function inviteMember(_: InviteState, form: FormData): Promise<Invi
   const parsed = z.object({ email: z.email(), role: z.enum(["admin", "staff"]) }).safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: "Enter a valid email and role" };
   const [{ n }] = (await db.select({ n: count() }).from(memberships).where(eq(memberships.workspaceId, ctx.workspace.id))) as [{ n: number }];
-  const limit = getPlan(ctx.workspace.plan).limits.members;
+  const limit = workspacePlan(ctx.workspace).limits.members;
   if (n >= limit) return { error: `Your plan includes ${limit} team member${limit === 1 ? "" : "s"}. Upgrade on the Billing page to invite more.` };
   const email = parsed.data.email.toLowerCase();
   const [existing] = await db

@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { automationRuns, automations, contacts, conversations, messages, workspaces, type FlowGraph } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 import { BLANK_GRAPH, TEMPLATES } from "@/lib/templates";
 import { validateGraph } from "@/lib/engine/executor";
 import { getOrCreateConversation, recordInbound } from "@/lib/messaging";
@@ -92,7 +92,7 @@ export async function setAutomationStatus(id: string, status: "active" | "paused
       .select({ n: count() })
       .from(automations)
       .where(and(eq(automations.workspaceId, ctx.workspace.id), eq(automations.status, "active")))) as [{ n: number }];
-    const limit = getPlan(ws?.plan).limits.activeAutomations;
+    const limit = workspacePlan(ws).limits.activeAutomations;
     if (n >= limit) return { ok: false, error: `Your plan allows ${limit} active automations. Pause one or upgrade on the Billing page.` };
   }
   await db.update(automations).set({ status, updatedAt: new Date() }).where(eq(automations.id, id));

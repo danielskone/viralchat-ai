@@ -7,7 +7,6 @@ import { db } from "@/db";
 import { chatbots, memberships, workspaces } from "@/db/schema";
 import { requireUser, requireWorkspace, setCurrentWorkspace } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { getPlan } from "@/lib/plans";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Enter your business name").max(120),
@@ -23,15 +22,7 @@ export async function createWorkspace(_: FormState, form: FormData): Promise<For
   const parsed = schema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  // Multiple workspaces are a Business+ feature; the first one is always allowed.
-  const existing = await db
-    .select({ plan: workspaces.plan })
-    .from(memberships)
-    .innerJoin(workspaces, eq(workspaces.id, memberships.workspaceId))
-    .where(eq(memberships.userId, user.id));
-  if (existing.length > 0 && !existing.some((w) => ["business", "agency"].includes(w.plan))) {
-    return { error: "Multiple workspaces are available on the Business and Agency plans." };
-  }
+  // Each workspace has its own subscription, so extra workspaces start on the subscribe screen.
 
   const ws = await db.transaction(async (tx) => {
     const [ws] = await tx
@@ -83,7 +74,3 @@ export async function deleteWorkspace(form: FormData) {
   redirect("/onboarding");
 }
 
-export async function canAddWorkspace() {
-  const ctx = await requireWorkspace();
-  return ctx.workspaces.length === 0 || getPlan(ctx.workspace.plan).id === "business" || getPlan(ctx.workspace.plan).id === "agency";
-}

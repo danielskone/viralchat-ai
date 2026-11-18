@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { workspaces, type Plan } from "@/db/schema";
-import { planForPriceId } from "./plans";
+import { ACCESS_STATUSES, addonForPriceId, planForPriceId } from "./plans";
 
 let client: Stripe | null = null;
 
@@ -17,24 +17,33 @@ export function getStripe(): Stripe {
   return client;
 }
 
-const ACTIVE = new Set(["active", "trialing", "past_due"]);
-
-/** Applies a Stripe subscription's state to its workspace. Source of truth for plan changes. */
+/** Applies a Stripe subscription's state to its workspace. Source of truth for plan, trial and add-ons. */
 export async function syncSubscription(sub: Stripe.Subscription) {
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-  const item = sub.items.data[0];
-  const priceId = item?.price.id;
-  const mapped = priceId ? planForPriceId(priceId) : null;
-  const plan: Plan = ACTIVE.has(sub.status) && mapped ? mapped : "free";
-  const periodEnd = (item as unknown as { current_period_end?: number } | undefined)?.current_period_end;
+  const active = ACCESS_STATUSES.has(sub.status);
+  let plan: Plan = "free";
+  const addons: string[] = [];
+  let periodEnd: number | undefined;
+  for (const item of sub.items.data) {
+    const mapped = planForPriceId(item.price.id);
+    if (mapped) {
+      if (active) plan = mapped;
+      periodEnd = (item as unknown as { current_period_end?: number }).current_period_end;
+      continue;
+    }
+    const addon = addonForPriceId(item.price.id);
+    if (addon && active) addons.push(addon.id);
+  }
   const workspaceId = sub.metadata?.workspaceId;
 
   const values = {
     plan,
+    addons,
     stripeCustomerId: customerId,
     stripeSubscriptionId: sub.status === "canceled" ? null : sub.id,
     subscriptionStatus: sub.status,
     currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
+    ...(sub.trial_end ? { trialEndsAt: new Date(sub.trial_end * 1000) } : {}),
   };
   if (workspaceId) {
     await db.update(workspaces).set(values).where(eq(workspaces.id, workspaceId));
@@ -43,3 +52,4 @@ export async function syncSubscription(sub: Stripe.Subscription) {
   }
   return plan;
 }
+

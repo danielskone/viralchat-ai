@@ -3,7 +3,7 @@ import { Trash2, BookOpen } from "lucide-react";
 import { db } from "@/db";
 import { chatbots, knowledgeItems } from "@/db/schema";
 import { requireWorkspace, hasRole } from "@/lib/auth";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader, Input, Textarea, EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { deleteKnowledge, updateKnowledge } from "@/lib/actions/chatbot";
@@ -19,7 +19,7 @@ export default async function ChatbotPage() {
     db.select().from(knowledgeItems).where(eq(knowledgeItems.workspaceId, ctx.workspace.id)).orderBy(asc(knowledgeItems.createdAt)),
     getOpenAI(ctx.workspace.id),
   ]);
-  const plan = getPlan(ctx.workspace.plan);
+  const plan = workspacePlan(ctx.workspace);
   const isAdmin = hasRole(ctx.role, "admin");
   return (
     <>
@@ -30,7 +30,7 @@ export default async function ChatbotPage() {
       />
       <div className="mb-4 flex flex-col gap-3">
         {!ai && <Alert tone="warning" title="No OpenAI key configured">Add an OpenAI API key on the Integrations page to enable AI replies and the preview below.</Alert>}
-        {!plan.limits.aiChatbot && <Alert tone="info" title="Available on Professional and above">You can configure and preview your assistant now; turning it on for live conversations requires the Professional plan.</Alert>}
+        {!plan.limits.aiChatbot && <Alert tone="info" title="Needs an active subscription">You can configure and preview your assistant now; turning it on for live conversations needs an active subscription or trial.</Alert>}
       </div>
       <div className="grid gap-6 xl:grid-cols-5">
         <div className="flex flex-col gap-6 xl:col-span-3">

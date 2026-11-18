@@ -16,7 +16,7 @@ import {
   type Contact,
   type Conversation,
 } from "@/db/schema";
-import { getPlan } from "@/lib/plans";
+import { hasAccess, workspacePlan } from "@/lib/plans";
 import { generateConversationReply } from "@/lib/ai";
 import { sendMessage } from "@/lib/messaging";
 import { logActivity } from "@/lib/audit";
@@ -208,8 +208,10 @@ async function persist(runId: string, st: RunState) {
 export async function startRun(automation: Automation, conv: Conversation, initialContext: Record<string, unknown>, isTest = false) {
   if (!isTest) {
     const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, automation.workspaceId)).limit(1);
+    // No subscription (trial over or canceled): stay quiet rather than notifying on every message.
+    if (!hasAccess(ws)) return null;
     const usage = await monthlyUsage(automation.workspaceId);
-    if (usage.runs >= getPlan(ws?.plan).limits.monthlyAutomationRuns) {
+    if (usage.runs >= workspacePlan(ws).limits.monthlyAutomationRuns) {
       await notifyTeam(automation.workspaceId, "Automation limit reached", `"${automation.name}" did not run: monthly run limit reached. Upgrade to continue.`, "/billing");
       return null;
     }
@@ -346,7 +348,7 @@ export async function handleInboundMessage(ctx: InboundCtx) {
   const [bot] = await db.select().from(chatbots).where(eq(chatbots.workspaceId, ctx.workspaceId)).limit(1);
   if (bot?.enabled && (bot.channels.includes(conv.channel) || conv.channel === "demo")) {
     const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, ctx.workspaceId)).limit(1);
-    const plan = getPlan(ws?.plan);
+    const plan = workspacePlan(ws);
     const usage = await monthlyUsage(ctx.workspaceId);
     if (!plan.limits.aiChatbot || usage.aiReplies >= plan.limits.monthlyAiReplies) {
       return { action: "ai_limit" as const };

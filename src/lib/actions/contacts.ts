@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { contactNotes, contacts, conversations, activities, workspaces } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
 import { audit, logActivity } from "@/lib/audit";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 import { count } from "drizzle-orm";
 import { stageLabel, temperatureFromScore } from "@/lib/utils";
 import { parseCsv } from "@/lib/csv";
@@ -25,7 +25,7 @@ const contactSchema = z.object({
 async function assertContactLimit(workspaceId: string, adding = 1) {
   const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
   const [{ n }] = (await db.select({ n: count() }).from(contacts).where(eq(contacts.workspaceId, workspaceId))) as [{ n: number }];
-  const limit = getPlan(ws?.plan).limits.contacts;
+  const limit = workspacePlan(ws).limits.contacts;
   if (n + adding > limit) throw new Error(`Your plan allows ${limit.toLocaleString()} contacts. Upgrade on the Billing page to add more.`);
 }
 

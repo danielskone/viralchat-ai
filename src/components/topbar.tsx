@@ -5,7 +5,7 @@ import { Avatar, Badge } from "./ui/primitives";
 import { logout } from "@/app/(auth)/actions";
 import { switchWorkspace } from "@/lib/actions/workspace";
 import type { WorkspaceContext } from "@/lib/auth";
-import { getPlan } from "@/lib/plans";
+import { workspacePlan } from "@/lib/plans";
 
 export function Topbar({ ctx, notificationCount }: { ctx: WorkspaceContext; notificationCount: number }) {
   return (
@@ -13,7 +13,7 @@ export function Topbar({ ctx, notificationCount }: { ctx: WorkspaceContext; noti
       <details className="relative">
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted">
           <span className="max-w-40 truncate text-sm font-medium sm:max-w-60">{ctx.workspace.name}</span>
-          <Badge tone="primary">{getPlan(ctx.workspace.plan).name}</Badge>
+          <Badge tone="primary">{workspacePlan(ctx.workspace).name}</Badge>
           <ChevronsUpDown className="size-4 text-muted-foreground" />
         </summary>
         <div className="absolute left-0 top-11 z-50 w-64 rounded-xl border bg-card p-1.5 shadow-lg">
