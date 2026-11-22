@@ -3,7 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, conversations, integrations, messages, type Channel, type Conversation, type Integration } from "@/db/schema";
 import { decrypt } from "./crypto";
-import { fetchProfile, sendDirectMessage, sendPrivateReply } from "./meta";
+import { fetchProfile, sendDirectMessage, sendPrivateReply, type MetaButton } from "./meta";
+import { describeButtons } from "./comment-flow";
 import { messagingWindow } from "./meta-parse";
 
 export async function getMetaIntegration(workspaceId: string): Promise<(Integration & { pageToken: string }) | null> {
@@ -132,6 +133,8 @@ export type SendOptions = {
   automationRunId?: string | null;
   /** Reply privately to this comment instead of a normal DM (comment-to-DM). */
   commentId?: string | null;
+  /** Up to 3 buttons (postback or link) shown under the message. */
+  buttons?: MetaButton[];
 };
 
 /**
@@ -168,7 +171,7 @@ export async function sendMessage(opts: SendOptions): Promise<{ ok: boolean; err
       error = "No Instagram professional account is linked to the connected Facebook Page.";
     } else if (opts.commentId) {
       try {
-        const r = await sendPrivateReply({ pageId: integ.pageId!, pageToken: integ.pageToken, commentId: opts.commentId, text: opts.text });
+        const r = await sendPrivateReply({ pageId: integ.pageId!, pageToken: integ.pageToken, commentId: opts.commentId, text: opts.text, buttons: opts.buttons });
         externalId = r.message_id ?? null;
       } catch (e) {
         status = "failed";
@@ -189,6 +192,7 @@ export async function sendMessage(opts: SendOptions): Promise<{ ok: boolean; err
             pageToken: integ.pageToken,
             recipientId,
             text: opts.text,
+            buttons: opts.buttons,
             tag: window.tag,
           });
           externalId = r.message_id ?? null;
@@ -201,13 +205,14 @@ export async function sendMessage(opts: SendOptions): Promise<{ ok: boolean; err
   }
 
   const now = new Date();
+  const body = describeButtons(opts.text, (opts.buttons ?? []).map((b) => ({ title: b.title, url: b.type === "web_url" ? b.url : undefined })));
   await db.insert(messages).values({
     workspaceId: opts.workspaceId,
     conversationId: opts.conversationId,
     direction: "outbound",
     senderType: opts.senderType,
     senderUserId: opts.senderUserId ?? null,
-    body: opts.text,
+    body,
     status,
     error: error ?? null,
     externalId,

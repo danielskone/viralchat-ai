@@ -23,7 +23,21 @@ import { logActivity } from "@/lib/audit";
 import { temperatureFromScore } from "@/lib/utils";
 import { execute, findTrigger, type ExecDeps, type RunState } from "./executor";
 import { matchKeyword } from "./matcher";
-import { bookingLinkFor } from "@/lib/booking-server";
+import { appUrl, bookingLinkFor } from "@/lib/booking-server";
+import { getMetaIntegration } from "@/lib/messaging";
+import { checkFollowsBusiness, type MetaButton } from "@/lib/meta";
+import { signState } from "@/lib/crypto";
+import {
+  commentMatches,
+  continueCommentFlow,
+  postMatches,
+  startCommentFlow,
+  type CommentFlow,
+  type QDeps,
+  type QResult,
+  type QState,
+} from "@/lib/comment-flow";
+import type { RunLogEntry } from "@/db/schema";
 
 function monthStart() {
   const d = new Date();
@@ -189,6 +203,81 @@ function buildDeps(run: { id: string; isTest: boolean; context: Record<string, u
   };
 }
 
+/** Runs one step of a Comment-to-DM quick flow and converts the result to a RunState. */
+async function runQuick(
+  flow: CommentFlow,
+  run: { id: string; isTest: boolean; context: Record<string, unknown> },
+  conv: Conversation,
+  input: { start: true } | { text: string | null },
+  priorLog: RunLogEntry[],
+): Promise<RunState> {
+  const base = buildDeps(run, conv, conv.contactId);
+  const log = [...priorLog];
+  const current = run.context.q as QState | undefined;
+  const deps: QDeps = {
+    vars: () => base.vars(),
+    async send(text, buttons) {
+      const metaButtons: MetaButton[] = buttons.map((b) =>
+        b.kind === "postback"
+          ? { type: "postback", title: b.title, payload: `vc:${run.id}:${b.step}` }
+          : {
+              type: "web_url",
+              title: b.title,
+              url: `${appUrl()}/r/${signState({ r: run.id, i: String(b.index) }, 30 * 86400)}`,
+            },
+      );
+      const commentId = typeof run.context.commentId === "string" && !run.context.privateReplySent ? run.context.commentId : null;
+      const r = await sendMessage({
+        conversationId: conv.id,
+        workspaceId: conv.workspaceId,
+        text,
+        buttons: metaButtons,
+        senderType: "automation",
+        automationRunId: run.id,
+        commentId,
+      });
+      if (commentId && r.ok) run.context.privateReplySent = true;
+      return r;
+    },
+    async isFollowing() {
+      if (run.isTest || conv.channel !== "instagram") return null;
+      const [c] = await db.select({ igId: contacts.instagramId }).from(contacts).where(eq(contacts.id, conv.contactId)).limit(1);
+      const integ = await getMetaIntegration(conv.workspaceId);
+      if (!c?.igId || !integ) return null;
+      return checkFollowsBusiness(c.igId, integ.pageToken);
+    },
+    async saveEmail(email) {
+      await db.update(contacts).set({ email, updatedAt: new Date() }).where(eq(contacts.id, conv.contactId));
+      if (!run.isTest) await logActivity(conv.workspaceId, conv.contactId, "field_set", `Shared their email (${email})`);
+    },
+    log(status, message) {
+      log.push({ at: new Date().toISOString(), nodeId: "quick", nodeType: "comment_dm", status, message });
+    },
+  };
+  let r: QResult;
+  if ("start" in input) r = await startCommentFlow(flow, deps);
+  else if (!current) r = { state: null, status: "completed", wait: null };
+  else r = await continueCommentFlow(flow, current, input.text, deps);
+
+  const now = Date.now();
+  const keepTimer = r.status === "waiting" && !r.wait; // a reply arrived while a follow-up timer is pending
+  return {
+    status: r.status,
+    currentNodeId: r.state ? `quick:${r.state.step}` : null,
+    waitingFor: keepTimer ? "timer" : r.wait?.for ?? null,
+    resumeAt: keepTimer
+      ? null
+      : r.wait?.for === "reply"
+        ? new Date(now + r.wait.hours * 3600_000)
+        : r.wait?.for === "timer"
+          ? new Date(now + r.wait.minutes * 60_000)
+          : null,
+    context: { ...run.context, q: r.state ?? undefined },
+    log,
+    error: r.error,
+  };
+}
+
 async function persist(runId: string, st: RunState) {
   await db
     .update(automationRuns)
@@ -225,9 +314,14 @@ export async function startRun(automation: Automation, conv: Conversation, initi
     .values({ workspaceId: automation.workspaceId, automationId: automation.id, contactId: conv.contactId, conversationId: conv.id, isTest, context: initialContext })
     .returning();
   await db.update(automations).set({ runsCount: sql`${automations.runsCount} + 1` }).where(eq(automations.id, automation.id));
-  const trigger = findTrigger(automation.graph);
-  const deps = buildDeps(run!, conv, conv.contactId);
-  const st = await execute(automation.graph, trigger?.id ?? null, { status: "running", currentNodeId: null, waitingFor: null, resumeAt: null, context: run!.context, log: [] }, deps);
+  let st: RunState;
+  if (automation.quick) {
+    st = await runQuick(automation.quick, run!, conv, { start: true }, []);
+  } else {
+    const trigger = findTrigger(automation.graph);
+    const deps = buildDeps(run!, conv, conv.contactId);
+    st = await execute(automation.graph, trigger?.id ?? null, { status: "running", currentNodeId: null, waitingFor: null, resumeAt: null, context: run!.context, log: [] }, deps);
+  }
   if (run!.context.privateReplySent) st.context.privateReplySent = true;
   await persist(run!.id, st);
   if (!isTest) await logActivity(automation.workspaceId, conv.contactId, "automation_ran", `Automation "${automation.name}" ${st.status}`);
@@ -240,6 +334,12 @@ export async function resumeRun(run: AutomationRun, reply: string | null) {
   if (!automation || !conv || !run.currentNodeId) {
     await db.update(automationRuns).set({ status: "failed", error: "Automation or conversation was deleted", finishedAt: new Date() }).where(eq(automationRuns.id, run.id));
     return null;
+  }
+  if (automation.quick) {
+    const st = await runQuick(automation.quick, { ...run, context: { ...run.context } }, conv, { text: reply }, run.log);
+    if (st.status === "waiting" && st.waitingFor === "timer" && !st.resumeAt) st.resumeAt = run.resumeAt; // keep the pending follow-up time
+    await persist(run.id, st);
+    return st;
   }
   const context: Record<string, unknown> = { ...run.context, ...(reply !== null ? { lastReply: reply } : {}) };
   const live = { ...run, context };
@@ -298,6 +398,21 @@ type InboundCtx = {
 export async function handleInboundMessage(ctx: InboundCtx) {
   const { conversation: conv } = ctx;
   if (conv.humanTakeover && !ctx.isTest) return { action: "human_takeover" as const };
+
+  // Button tap from a Comment-to-DM message: payload "vc:<runId>:<step>"
+  const tap = /^vc:([0-9a-f-]{36}):(\w+)$/i.exec(ctx.text.trim());
+  if (tap) {
+    const claimed = await db
+      .update(automationRuns)
+      .set({ status: "running" })
+      .where(and(eq(automationRuns.id, tap[1]!), eq(automationRuns.conversationId, conv.id), eq(automationRuns.status, "waiting"), eq(automationRuns.waitingFor, "reply")))
+      .returning();
+    if (claimed[0]) {
+      const st = await resumeRun({ ...claimed[0], status: "waiting" }, tap[2]!);
+      return { action: "resumed" as const, runId: claimed[0].id, state: st };
+    }
+    return { action: "none" as const }; // old button: ignore instead of sending the payload to the AI
+  }
 
   const [waiting] = await db
     .select()
@@ -373,16 +488,43 @@ export async function handleInboundMessage(ctx: InboundCtx) {
 }
 
 /** Comment-to-DM: matches comment keyword automations, optionally replies publicly, then DMs privately. */
-export async function findCommentAutomation(workspaceId: string, channel: "instagram" | "messenger", text: string, postId: string | null) {
+export async function findCommentAutomation(
+  workspaceId: string,
+  channel: "instagram" | "messenger",
+  text: string,
+  postId: string | null,
+  postTime?: (postId: string) => Promise<Date | null>,
+) {
   const list = await db
     .select()
     .from(automations)
     .where(and(eq(automations.workspaceId, workspaceId), eq(automations.status, "active"), eq(automations.triggerType, "comment_keyword")))
     .orderBy(automations.createdAt);
-  return (
-    list.find(
-      (a) => a.channels.includes(channel) && (!a.postId || a.postId === postId) && matchKeyword(text, a.keywords, a.matchType),
-    ) ?? null
-  );
+  let published: Date | null | undefined;
+  for (const a of list) {
+    if (!a.channels.includes(channel)) continue;
+    if (!a.quick) {
+      if ((!a.postId || a.postId === postId) && matchKeyword(text, a.keywords, a.matchType)) return a;
+      continue;
+    }
+    if (!commentMatches(a.quick, a.keywords, text)) continue;
+    const pm = postMatches(a.quick, a.postId, postId);
+    if (pm === true) return a;
+    if (pm === "check-time" && postId && postTime) {
+      if (published === undefined) published = await postTime(postId);
+      const armed = a.quick.nextArmedAt ? new Date(a.quick.nextArmedAt) : a.updatedAt;
+      if (published && published > armed) {
+        // First comment on the new post: lock this automation to that post.
+        const [bound] = await db
+          .update(automations)
+          .set({ postId })
+          .where(and(eq(automations.id, a.id), sql`${automations.postId} is null`))
+          .returning({ id: automations.id });
+        if (bound) return { ...a, postId };
+        const [again] = await db.select({ postId: automations.postId }).from(automations).where(eq(automations.id, a.id)).limit(1);
+        if (again?.postId === postId) return a;
+      }
+    }
+  }
+  return null;
 }
-

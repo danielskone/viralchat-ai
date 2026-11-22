@@ -5,6 +5,7 @@ import { automations, chatbots, integrations } from "@/db/schema";
 import { requireWorkspace, hasRole } from "@/lib/auth";
 import { recentRuns } from "@/lib/actions/automations";
 import { Builder } from "./builder";
+import { QuickBuilder } from "./quick-builder";
 
 export default async function AutomationPage({ params }: PageProps<"/automations/[id]">) {
   const ctx = await requireWorkspace();
@@ -17,6 +18,8 @@ export default async function AutomationPage({ params }: PageProps<"/automations
     db.select().from(chatbots).where(eq(chatbots.workspaceId, ctx.workspace.id)).limit(1),
     recentRuns(id),
   ]);
+  const serialized = { ...a, createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString() };
+  if (a.quick) return <QuickBuilder automation={serialized} metaConnected={meta?.status === "connected"} canDelete={hasRole(ctx.role, "admin")} />;
   return (
     <Builder
       automation={{ ...a, createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString() }}

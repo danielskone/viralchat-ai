@@ -117,17 +117,31 @@ export async function unsubscribePage(pageId: string, pageToken: string) {
 
 type SendResult = { message_id?: string; recipient_id?: string };
 
+export type MetaButton = { type: "postback"; title: string; payload: string } | { type: "web_url"; title: string; url: string };
+
+/** A plain text message, or a button template when buttons are given (works on Instagram and Messenger). */
+function messageBody(text: string, buttons?: MetaButton[]) {
+  if (!buttons?.length) return { text };
+  return {
+    attachment: {
+      type: "template",
+      payload: { template_type: "button", text: text.slice(0, 640), buttons: buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })) },
+    },
+  };
+}
+
 /** Sends a DM. Instagram (via Facebook Login) and Messenger both use the Page's /messages endpoint with the Page token. */
 export async function sendDirectMessage(opts: {
   pageId: string;
   pageToken: string;
   recipientId: string;
   text: string;
+  buttons?: MetaButton[];
   tag?: "HUMAN_AGENT" | null;
 }) {
   const body: Record<string, unknown> = {
     recipient: { id: opts.recipientId },
-    message: { text: opts.text },
+    message: messageBody(opts.text, opts.buttons),
     messaging_type: opts.tag ? "MESSAGE_TAG" : "RESPONSE",
   };
   if (opts.tag) body.tag = opts.tag;
@@ -139,11 +153,11 @@ export async function sendDirectMessage(opts: {
 }
 
 /** Private reply: one DM in response to a comment (allowed within 7 days of the comment). */
-export async function sendPrivateReply(opts: { pageId: string; pageToken: string; commentId: string; text: string }) {
+export async function sendPrivateReply(opts: { pageId: string; pageToken: string; commentId: string; text: string; buttons?: MetaButton[] }) {
   return call<SendResult>(graph(`/${opts.pageId}/messages?access_token=${opts.pageToken}`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { comment_id: opts.commentId }, message: { text: opts.text } }),
+    body: JSON.stringify({ recipient: { comment_id: opts.commentId }, message: messageBody(opts.text, opts.buttons) }),
   });
 }
 
@@ -169,6 +183,57 @@ export async function fetchProfile(channel: "instagram" | "messenger", userId: s
       graph(`/${userId}?fields=first_name,last_name,profile_pic&access_token=${pageToken}`),
     );
     return { name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Messenger user", username: null, avatarUrl: p.profile_pic ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Instagram only: does this person follow the business account? null if Meta won't say. */
+export async function checkFollowsBusiness(igsid: string, pageToken: string): Promise<boolean | null> {
+  try {
+    const p = await call<{ is_user_follow_business?: boolean }>(graph(`/${igsid}?fields=is_user_follow_business&access_token=${pageToken}`));
+    return typeof p.is_user_follow_business === "boolean" ? p.is_user_follow_business : null;
+  } catch {
+    return null;
+  }
+}
+
+export type RecentPost = { id: string; channel: "instagram" | "messenger"; thumb: string | null; caption: string; permalink: string | null; timestamp: string | null };
+
+export async function listInstagramMedia(igId: string, pageToken: string): Promise<RecentPost[]> {
+  const res = await call<{ data: { id: string; caption?: string; media_type?: string; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp?: string }[] }>(
+    graph(`/${igId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${pageToken}`),
+  );
+  return res.data.map((m) => ({
+    id: m.id,
+    channel: "instagram",
+    thumb: m.thumbnail_url ?? (m.media_type === "VIDEO" ? null : m.media_url ?? null),
+    caption: (m.caption ?? "").slice(0, 200),
+    permalink: m.permalink ?? null,
+    timestamp: m.timestamp ?? null,
+  }));
+}
+
+export async function listPagePosts(pageId: string, pageToken: string): Promise<RecentPost[]> {
+  const res = await call<{ data: { id: string; message?: string; full_picture?: string; permalink_url?: string; created_time?: string }[] }>(
+    graph(`/${pageId}/posts?fields=id,message,full_picture,permalink_url,created_time&limit=24&access_token=${pageToken}`),
+  );
+  return res.data.map((p) => ({
+    id: p.id,
+    channel: "messenger",
+    thumb: p.full_picture ?? null,
+    caption: (p.message ?? "").slice(0, 200),
+    permalink: p.permalink_url ?? null,
+    timestamp: p.created_time ?? null,
+  }));
+}
+
+/** When was this post/reel published? */
+export async function fetchPostTime(channel: "instagram" | "messenger", postId: string, pageToken: string): Promise<Date | null> {
+  try {
+    const field = channel === "instagram" ? "timestamp" : "created_time";
+    const p = await call<Record<string, string>>(graph(`/${postId}?fields=${field}&access_token=${pageToken}`));
+    return p[field] ? new Date(p[field]!) : null;
   } catch {
     return null;
   }

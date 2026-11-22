@@ -5,7 +5,8 @@ import { eq, and } from "drizzle-orm";
 import type { InboundEvent } from "./meta-parse";
 import { findIntegrationForAccount, getOrCreateConversation, recordInbound, upsertSocialContact } from "./messaging";
 import { findCommentAutomation, handleInboundMessage, startRun } from "./engine/runtime";
-import { replyToComment } from "./meta";
+import { fetchPostTime, replyToComment } from "./meta";
+import { pickPublicReply } from "./comment-flow";
 import { logActivity } from "./audit";
 
 /** Processes one parsed Meta webhook event end-to-end. Idempotent per message/comment id. */
@@ -44,7 +45,7 @@ export async function processMetaEvent(ev: InboundEvent) {
     .returning({ id: webhookEvents.id });
   if (!inserted.length) return { skipped: "duplicate comment" };
 
-  const automation = await findCommentAutomation(workspaceId, ev.channel, ev.text, ev.postId);
+  const automation = await findCommentAutomation(workspaceId, ev.channel, ev.text, ev.postId, (pid) => fetchPostTime(ev.channel, pid, integ.pageToken));
   if (!automation) {
     await markProcessed(ev.commentId);
     return { skipped: "no matching comment automation" };
@@ -61,9 +62,10 @@ export async function processMetaEvent(ev: InboundEvent) {
   const { conversation } = await getOrCreateConversation(workspaceId, contact.id, ev.channel);
 
   let publicReplyError: string | null = null;
-  if (automation.publicReply) {
+  const publicReply = automation.quick ? pickPublicReply(automation.quick) : automation.publicReply;
+  if (publicReply) {
     try {
-      await replyToComment({ channel: ev.channel, commentId: ev.commentId, pageToken: integ.pageToken, text: automation.publicReply });
+      await replyToComment({ channel: ev.channel, commentId: ev.commentId, pageToken: integ.pageToken, text: publicReply });
     } catch (e) {
       publicReplyError = e instanceof Error ? e.message : String(e);
     }

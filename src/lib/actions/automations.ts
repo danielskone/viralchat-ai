@@ -12,6 +12,20 @@ import { BLANK_GRAPH, TEMPLATES } from "@/lib/templates";
 import { validateGraph } from "@/lib/engine/executor";
 import { getOrCreateConversation, recordInbound } from "@/lib/messaging";
 import { handleInboundMessage, startRun } from "@/lib/engine/runtime";
+import {
+  BUTTON_MAX,
+  MAX_LINKS,
+  MAX_PUBLIC_REPLIES,
+  TEXT_MAX,
+  commentMatches,
+  defaultCommentFlow,
+  normalizeUrl,
+  pickPublicReply,
+  validateCommentFlow,
+  type CommentFlow,
+} from "@/lib/comment-flow";
+import { getMetaIntegration } from "@/lib/messaging";
+import { listInstagramMedia, listPagePosts, type RecentPost } from "@/lib/meta";
 
 export async function createAutomation(form: FormData) {
   const ctx = await requireWorkspace();
@@ -33,6 +47,106 @@ export async function createAutomation(form: FormData) {
     .returning();
   await audit(ctx.workspace.id, ctx.user.id, "automation.create", a!.id, { template: key || null });
   redirect(`/automations/${a!.id}`);
+}
+
+/** New Comment-to-DM automation using the simple setup screen. */
+export async function createCommentDm() {
+  const ctx = await requireWorkspace();
+  const [a] = await db
+    .insert(automations)
+    .values({
+      workspaceId: ctx.workspace.id,
+      name: "Comment to DM",
+      description: "Replies to comments and sends a DM with your link.",
+      triggerType: "comment_keyword",
+      channels: ["instagram", "messenger"],
+      keywords: ["link"],
+      graph: structuredClone(BLANK_GRAPH),
+      quick: defaultCommentFlow(),
+      templateKey: "comment-dm-quick",
+    })
+    .returning();
+  await audit(ctx.workspace.id, ctx.user.id, "automation.create", a!.id, { template: "comment-dm-quick" });
+  redirect(`/automations/${a!.id}`);
+}
+
+const txt = (max: number) => z.string().max(max * 2).transform((v) => v.slice(0, max));
+const flowSchema = z.object({
+  postMode: z.enum(["specific", "any", "next"]),
+  postIds: z.array(z.string().max(100)).max(30),
+  posts: z
+    .array(z.object({ id: z.string().max(100), thumb: z.string().max(2000).nullable(), caption: txt(200), channel: z.enum(["instagram", "messenger"]) }))
+    .max(30),
+  anyWord: z.boolean(),
+  publicReplyOn: z.boolean(),
+  publicReplies: z.array(txt(300)).max(MAX_PUBLIC_REPLIES),
+  opening: z.object({ on: z.boolean(), text: txt(TEXT_MAX), button: txt(BUTTON_MAX) }),
+  follow: z.object({ on: z.boolean(), text: txt(TEXT_MAX), button: txt(BUTTON_MAX) }),
+  email: z.object({ on: z.boolean(), text: txt(TEXT_MAX) }),
+  link: z.object({ text: txt(TEXT_MAX), links: z.array(z.object({ label: txt(BUTTON_MAX), url: txt(1000) })).max(MAX_LINKS) }),
+  followUp: z.object({ on: z.boolean(), text: txt(TEXT_MAX), delayMinutes: z.number().int().min(5).max(1380) }),
+});
+const quickSaveSchema = z.object({
+  name: z.string().trim().min(1, "Give it a name").max(120),
+  channels: z.array(z.enum(["instagram", "messenger"])).min(1, "Pick Instagram, Facebook or both"),
+  keywords: z.array(z.string().trim().max(60)).max(30),
+  flow: flowSchema,
+});
+export type QuickSavePayload = z.infer<typeof quickSaveSchema>;
+
+export async function saveCommentFlow(id: string, payload: QuickSavePayload, goLive?: boolean): Promise<{ ok: boolean; error?: string; problems?: string[] }> {
+  const ctx = await requireWorkspace();
+  const a = await own(ctx.workspace.id, id);
+  const parsed = quickSaveSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+  const prev = a.quick;
+  const flow: CommentFlow = {
+    ...d.flow,
+    kind: "comment_dm",
+    postIds: d.flow.postMode === "specific" ? d.flow.postIds : [],
+    posts: d.flow.postMode === "specific" ? d.flow.posts.filter((p) => d.flow.postIds.includes(p.id)) : [],
+    publicReplies: d.flow.publicReplies.map((r) => r.trim()).filter(Boolean),
+    link: { text: d.flow.link.text, links: d.flow.link.links.map((l) => ({ label: l.label.trim(), url: normalizeUrl(l.url) })) },
+    // "Next post": only posts published after this moment count. Re-arm when the mode is switched on.
+    nextArmedAt: d.flow.postMode === "next" ? (prev?.postMode === "next" && prev.nextArmedAt ? prev.nextArmedAt : new Date().toISOString()) : null,
+  };
+  const keywords = [...new Set(d.keywords.map((k) => k.replace(/^["']+|["']+$/g, "").trim()).filter(Boolean))];
+  const problems = validateCommentFlow(flow, keywords);
+  if ((a.status === "active" || goLive) && problems.length) {
+    return { ok: false, error: goLive ? "Almost there. Fix these to go live:" : "Fix these before saving a live automation:", problems };
+  }
+  const keepBound = flow.postMode === "next" && prev?.postMode === "next" ? a.postId : null;
+  await db
+    .update(automations)
+    .set({ name: d.name, channels: d.channels, keywords, matchType: "contains", quick: flow, postId: keepBound, publicReply: null, updatedAt: new Date() })
+    .where(eq(automations.id, id));
+  revalidatePath(`/automations/${id}`);
+  revalidatePath("/automations");
+  if (goLive && a.status !== "active") return setAutomationStatus(id, "active");
+  return { ok: true, problems };
+}
+
+/** Recent posts and reels for the post picker. */
+export async function listRecentPosts(): Promise<{ posts: RecentPost[]; error?: string }> {
+  const ctx = await requireWorkspace();
+  const integ = await getMetaIntegration(ctx.workspace.id);
+  if (!integ) return { posts: [], error: "Connect Instagram and Facebook on the Integrations page to pick a post." };
+  const posts: RecentPost[] = [];
+  const errors: string[] = [];
+  if (integ.instagramAccountId) {
+    try {
+      posts.push(...(await listInstagramMedia(integ.instagramAccountId, integ.pageToken)));
+    } catch (e) {
+      errors.push(`Instagram: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  try {
+    posts.push(...(await listPagePosts(integ.pageId!, integ.pageToken)));
+  } catch (e) {
+    errors.push(`Facebook: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return { posts, error: posts.length === 0 && errors.length ? `Couldn't load your posts. ${errors.join(" · ")}` : undefined };
 }
 
 const nodeSchema = z.object({
@@ -84,8 +198,8 @@ export async function setAutomationStatus(id: string, status: "active" | "paused
   const ctx = await requireWorkspace();
   const a = await own(ctx.workspace.id, id);
   if (status === "active") {
-    const problems = validateGraph(a.graph);
-    if ((a.triggerType === "dm_keyword" || a.triggerType === "comment_keyword") && a.keywords.length === 0) problems.unshift("Add at least one trigger keyword.");
+    const problems = a.quick ? validateCommentFlow(a.quick, a.keywords) : validateGraph(a.graph);
+    if (!a.quick && (a.triggerType === "dm_keyword" || a.triggerType === "comment_keyword") && a.keywords.length === 0) problems.unshift("Add at least one trigger keyword.");
     if (problems.length) return { ok: false, error: "This automation can't be activated yet:", problems };
     const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, ctx.workspace.id)).limit(1);
     const [{ n }] = (await db
@@ -166,9 +280,11 @@ export async function testSend(automationId: string, text: string, asComment: bo
     // Simulated public comment → private-reply DM
     await db.insert(messages).values({ workspaceId: ctx.workspace.id, conversationId: conv.id, direction: "inbound", senderType: "contact", body: `💬 Comment: ${body}`, status: "received" });
     const { matchKeyword } = await import("@/lib/engine/matcher");
-    if (a.triggerType === "comment_keyword" && matchKeyword(body, a.keywords, a.matchType)) {
-      if (a.publicReply) {
-        await db.insert(messages).values({ workspaceId: ctx.workspace.id, conversationId: conv.id, direction: "outbound", senderType: "automation", body: `↩︎ Public reply: ${a.publicReply}`, status: "simulated" });
+    const matched = a.quick ? commentMatches(a.quick, a.keywords, body) : a.triggerType === "comment_keyword" && !!matchKeyword(body, a.keywords, a.matchType);
+    if (matched) {
+      const publicReply = a.quick ? pickPublicReply(a.quick) : a.publicReply;
+      if (publicReply) {
+        await db.insert(messages).values({ workspaceId: ctx.workspace.id, conversationId: conv.id, direction: "outbound", senderType: "automation", body: `↩︎ Public reply: ${publicReply}`, status: "simulated" });
       }
       await startRun(a, { ...conv, lastInboundAt: new Date() }, { triggerText: body, trigger: "comment_keyword", commentId: "test-comment" }, true);
     } else {

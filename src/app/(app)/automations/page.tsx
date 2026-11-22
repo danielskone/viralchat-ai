@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
-import { Workflow, Plus, Copy } from "lucide-react";
+import { Workflow, Plus, Copy, MessageCircleReply } from "lucide-react";
 import { db } from "@/db";
 import { automations, integrations } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
 import { Badge, Card, EmptyState, PageHeader, Alert } from "@/components/ui/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { createAutomation, duplicateAutomation } from "@/lib/actions/automations";
+import { createAutomation, createCommentDm, duplicateAutomation } from "@/lib/actions/automations";
 import { TRIGGER_LABELS } from "@/lib/node-catalog";
 import { timeAgo } from "@/lib/utils";
 import { and } from "drizzle-orm";
@@ -29,7 +29,10 @@ export default async function AutomationsPage() {
           <>
             <Link href="/templates" className={buttonVariants({ variant: "outline" })}>Browse templates</Link>
             <form action={createAutomation}>
-              <Button variant="gradient"><Plus /> New automation</Button>
+              <Button variant="outline"><Plus /> Custom flow</Button>
+            </form>
+            <form action={createCommentDm}>
+              <Button variant="gradient"><MessageCircleReply /> Comment to DM</Button>
             </form>
           </>
         }
@@ -46,7 +49,11 @@ export default async function AutomationsPage() {
           icon={<Workflow />}
           title="No automations yet"
           description="Start from a proven template like Comment-to-DM, or build your own flow from scratch."
-          action={<Link href="/templates" className={buttonVariants({ variant: "gradient" })}>Choose a template</Link>}
+          action={
+            <form action={createCommentDm}>
+              <Button variant="gradient"><MessageCircleReply /> Set up Comment to DM</Button>
+            </form>
+          }
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -56,7 +63,7 @@ export default async function AutomationsPage() {
                 <Link href={`/automations/${a.id}`} className="font-semibold hover:underline">{a.name}</Link>
                 <Badge tone={a.status === "active" ? "success" : a.status === "paused" ? "warning" : "default"}>{a.status}</Badge>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">{TRIGGER_LABELS[a.triggerType]}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{a.quick ? "Comment to DM" : TRIGGER_LABELS[a.triggerType]}</p>
               {a.keywords.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {a.keywords.slice(0, 5).map((k) => <Badge key={k} tone="primary">{k}</Badge>)}

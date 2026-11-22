@@ -1,3 +1,4 @@
+import type { CommentFlow } from "@/lib/comment-flow";
 import {
   pgTable,
   pgEnum,
@@ -352,6 +353,8 @@ export const automations = pgTable(
     // For comment triggers: optional public reply posted under the comment
     publicReply: text("public_reply"),
     graph: jsonb("graph").$type<FlowGraph>().notNull(),
+    // Comment-to-DM quick setup. When set, this replaces the graph.
+    quick: jsonb("quick").$type<CommentFlow>(),
     templateKey: text("template_key"),
     runsCount: integer("runs_count").notNull().default(0),
     createdAt: createdAt(),
