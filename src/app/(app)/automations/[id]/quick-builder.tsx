@@ -66,43 +66,41 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   );
 }
 
-function Section({ step, title, hint, children, right }: { step?: number; title: string; hint?: string; children?: React.ReactNode; right?: React.ReactNode }) {
+function Heading({ children }: { children: React.ReactNode }) {
+  return <h2 className="pt-2 text-lg font-bold tracking-tight">{children}</h2>;
+}
+
+/** A grey rounded box. With `on`/`onToggle` it gets a switch, and its content only shows when on. */
+function Row({ label, on, onToggle, children, note }: { label: string; on?: boolean; onToggle?: (v: boolean) => void; children?: React.ReactNode; note?: string }) {
+  const open = onToggle ? on : true;
   return (
-    <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
-      <div className="flex items-start gap-3">
-        {step !== undefined && (
-          <span className="brand-gradient flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">{step}</span>
-        )}
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold leading-7">{title}</h3>
-          {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-        </div>
-        {right}
+    <div className="rounded-xl bg-muted/70 p-3">
+      <div className="flex items-center gap-3">
+        <span className="flex-1 text-sm">{label}</span>
+        {onToggle && <Switch label={label} on={!!on} onChange={onToggle} />}
       </div>
-      {children && <div className="mt-4 space-y-3">{children}</div>}
-    </section>
+      {note && open && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+      {open && children && <div className="mt-3 space-y-2">{children}</div>}
+    </div>
   );
 }
 
-function Choice({ checked, onClick, title, hint }: { checked: boolean; onClick: () => void; title: string; hint?: string }) {
+function Choice({ checked, onClick, title, help, children }: { checked: boolean; onClick: () => void; title: string; help?: string; children?: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={checked}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
-        checked ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted",
-      )}
-    >
-      <span className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", checked ? "border-primary" : "border-muted-foreground/40")}>
-        {checked && <span className="size-2 rounded-full bg-primary" />}
-      </span>
-      <span>
-        <span className="block text-sm font-medium">{title}</span>
-        {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
-      </span>
-    </button>
+    <div className="rounded-xl bg-muted/70 p-3">
+      <button type="button" onClick={onClick} aria-pressed={checked} className="flex w-full items-center gap-3 text-left">
+        <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border-2 bg-card", checked ? "border-primary" : "border-muted-foreground/40")}>
+          {checked && <span className="size-2.5 rounded-full bg-primary" />}
+        </span>
+        <span className="text-sm">{title}</span>
+        {help && (
+          <span title={help} className="text-muted-foreground">
+            <Info className="size-3.5" />
+          </span>
+        )}
+      </button>
+      {checked && children && <div className="mt-3">{children}</div>}
+    </div>
   );
 }
 
@@ -110,7 +108,41 @@ function Counted({ value, onChange, max, rows = 4, placeholder, label }: { value
   return (
     <div>
       <Textarea aria-label={label} value={value} rows={rows} maxLength={max} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-      <p className="mt-1 text-right text-xs text-muted-foreground">{max - value.length} left</p>
+      <p className="mt-0.5 text-right text-xs text-muted-foreground">{max - value.length}</p>
+    </div>
+  );
+}
+
+function LinkDialog({ initial, onCancel, onSave }: { initial: FlowLink; onCancel: () => void; onSave: (l: FlowLink) => void }) {
+  const [l, setL] = useState(initial);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]" onClick={onCancel}>
+      <div role="dialog" aria-label="Add a link" className="w-full max-w-md rounded-2xl bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="relative border-b px-5 py-3 text-center">
+          <h3 className="text-lg font-bold">Add a link</h3>
+          <button type="button" aria-label="Close" onClick={onCancel} className="absolute top-3 right-3 rounded p-1 hover:bg-muted">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="space-y-3 p-5">
+          <label className="block text-sm">
+            Button label
+            <Input autoFocus aria-label="Button label" className="mt-1" value={l.label} maxLength={BUTTON_MAX} placeholder="Add a button label e.g. Open" onChange={(e) => setL({ ...l, label: e.target.value })} />
+          </label>
+          <label className="block text-sm">
+            Link
+            <Input aria-label="Link" className="mt-1" value={l.url} placeholder="Add a link" onChange={(e) => setL({ ...l, url: e.target.value })} />
+          </label>
+        </div>
+        <div className="flex justify-between border-t px-5 py-3">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button disabled={!l.label.trim() || !l.url.trim()} onClick={() => onSave({ label: l.label.trim(), url: l.url.trim() })}>
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -128,7 +160,6 @@ export function QuickBuilder({ automation: a, metaConnected, canDelete }: { auto
   const [posts, setPosts] = useState<RecentPost[] | null>(null);
   const [postsError, setPostsError] = useState<string | null>(null);
   const [showAllPosts, setShowAllPosts] = useState(false);
-  const [newLink, setNewLink] = useState<FlowLink | null>(null);
 
   const keywords = useMemo(() => words.split(",").map((w) => w.trim()).filter(Boolean), [words]);
   const problems = validateCommentFlow(flow, keywords);
@@ -183,13 +214,14 @@ export function QuickBuilder({ automation: a, metaConnected, canDelete }: { auto
     });
   };
 
-  const visiblePosts = posts ? (showAllPosts ? posts : posts.slice(0, 8)) : [];
-  let step = 0;
+  const visiblePosts = posts ? (showAllPosts ? posts : posts.slice(0, 4)) : [];
+  const [editing, setEditing] = useState<number | null>(null);
+  const [whyOpen, setWhyOpen] = useState(false);
 
   return (
-    <div className="-m-4 min-h-[calc(100vh-4rem)] bg-muted/30 sm:-m-6">
+    <div className="-m-4 bg-card sm:-m-6">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-3 backdrop-blur sm:px-6">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2.5 backdrop-blur sm:px-6">
         <Link href="/automations" className="rounded-lg p-1.5 hover:bg-muted" aria-label="Back to automations">
           <ArrowLeft className="size-4" />
         </Link>
@@ -221,19 +253,19 @@ export function QuickBuilder({ automation: a, metaConnected, canDelete }: { auto
               <Pause /> Pause
             </Button>
           ) : (
-            <Button variant="gradient" onClick={() => save(true)} disabled={pending}>
-              <Rocket /> Go live
+            <Button onClick={() => save(true)} disabled={pending}>
+              <Rocket /> Go Live
             </Button>
           )}
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-6xl gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* Settings */}
-        <div className="space-y-4">
+      <div className="grid lg:grid-cols-[440px_minmax(0,1fr)]">
+        {/* Settings column */}
+        <div className="space-y-3 border-r p-4 sm:p-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto">
           {!metaConnected && (
             <Alert tone="warning" title="Instagram and Facebook aren't connected yet">
-              You can set this up now. It starts working once you connect on the <Link href="/integrations" className="underline">Integrations</Link> page.
+              It starts working once you connect on the <Link href="/integrations" className="underline">Integrations</Link> page.
             </Alert>
           )}
           {msg && (
@@ -248,254 +280,184 @@ export function QuickBuilder({ automation: a, metaConnected, canDelete }: { auto
             </Alert>
           )}
 
-          <Section step={++step} title="Which post should this work on?">
-            <div className="flex flex-wrap gap-2">
-              {(["instagram", "messenger"] as const).map((ch) => (
-                <label key={ch} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-sm", channels.includes(ch) && "border-primary bg-primary/5")}>
-                  <input
-                    type="checkbox"
-                    className="accent-[var(--primary)]"
-                    checked={channels.includes(ch)}
-                    onChange={(e) => {
-                      setChannels(e.target.checked ? [...channels, ch] : channels.filter((c) => c !== ch));
-                      setDirty(true);
-                    }}
-                  />
-                  {ch === "instagram" ? "Instagram" : "Facebook"}
-                </label>
-              ))}
-            </div>
-            <Choice checked={flow.postMode === "specific"} onClick={() => update({ postMode: "specific" })} title="A specific post or reel" hint="Pick one or more of your posts." />
-            {flow.postMode === "specific" && (
-              <div className="rounded-xl bg-muted/50 p-3">
-                {!posts && !postsError && (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" /> Loading your posts…
-                  </p>
-                )}
-                {postsError && <p className="text-sm text-destructive">{postsError}</p>}
-                {posts && posts.length === 0 && !postsError && <p className="text-sm text-muted-foreground">No posts found yet.</p>}
-                {visiblePosts.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {visiblePosts.map((p) => {
-                      const on = flow.postIds.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => togglePost(p)}
-                          title={p.caption || "Post"}
-                          aria-pressed={on}
-                          className={cn("relative aspect-[4/5] overflow-hidden rounded-lg border-2 bg-muted", on ? "border-primary" : "border-transparent opacity-80 hover:opacity-100")}
-                        >
-                          {p.thumb ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.thumb} alt={p.caption || "Post"} className="size-full object-cover" />
-                          ) : (
-                            <span className="flex size-full items-center justify-center p-1 text-[10px] text-muted-foreground">{p.caption.slice(0, 40) || "Video"}</span>
-                          )}
-                          {on && <CheckCircle2 className="absolute top-1 right-1 size-4 rounded-full bg-white text-primary" />}
-                          <span className="absolute bottom-0 left-0 rounded-tr bg-black/60 px-1 text-[9px] text-white">{p.channel === "instagram" ? "IG" : "FB"}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {posts && posts.length > 8 && (
-                  <button type="button" onClick={() => setShowAllPosts(!showAllPosts)} className="mt-2 text-sm font-medium text-primary">
-                    {showAllPosts ? "Show fewer" : `Show all ${posts.length}`}
-                  </button>
-                )}
+          <Heading>When someone comments on</Heading>
+          <Choice checked={flow.postMode === "specific"} onClick={() => update({ postMode: "specific" })} title="a specific post or reel">
+            {!posts && !postsError && (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Loading your posts…
+              </p>
+            )}
+            {postsError && <p className="text-sm text-destructive">{postsError}</p>}
+            {posts && posts.length === 0 && !postsError && <p className="text-sm text-muted-foreground">No posts found yet.</p>}
+            {visiblePosts.length > 0 && (
+              <div className="grid grid-cols-4 gap-1.5">
+                {visiblePosts.map((p) => {
+                  const on = flow.postIds.includes(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => togglePost(p)}
+                      title={p.caption || "Post"}
+                      aria-pressed={on}
+                      className={cn("relative aspect-[3/4] overflow-hidden rounded-lg border-2 bg-muted", on ? "border-primary" : "border-transparent hover:opacity-90")}
+                    >
+                      {p.thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.thumb} alt={p.caption || "Post"} className="size-full object-cover" />
+                      ) : (
+                        <span className="flex size-full items-center justify-center p-1 text-[10px] text-muted-foreground">{p.caption.slice(0, 40) || "Video"}</span>
+                      )}
+                      {on && <CheckCircle2 className="absolute top-1 right-1 size-4 rounded-full bg-white text-primary" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
-            <Choice checked={flow.postMode === "any"} onClick={() => update({ postMode: "any" })} title="Any post or reel" hint="Works on every post, old and new." />
-            <Choice
-              checked={flow.postMode === "next"}
-              onClick={() => update({ postMode: "next" })}
-              title="My next post or reel"
-              hint="Set it up now, then post. It locks onto the first new post that gets a comment."
-            />
-          </Section>
-
-          <Section step={++step} title="Which comments should get a DM?">
-            <Choice checked={!flow.anyWord} onClick={() => update({ anyWord: false })} title="Comments with certain words" />
-            {!flow.anyWord && (
-              <div className="pl-7">
-                <Input
-                  aria-label="Trigger words"
-                  value={words}
-                  placeholder="e.g. link, info, price"
+            {posts && posts.length > 4 && (
+              <button type="button" onClick={() => setShowAllPosts(!showAllPosts)} className="mt-2 text-sm font-medium text-primary">
+                {showAllPosts ? "Show Less" : "Show All"}
+              </button>
+            )}
+          </Choice>
+          <Choice checked={flow.postMode === "any"} onClick={() => update({ postMode: "any" })} title="any post or reel" help="Works on every post and reel, old and new." />
+          <Choice
+            checked={flow.postMode === "next"}
+            onClick={() => update({ postMode: "next" })}
+            title="next post or reel"
+            help="Set it up now, then post. It locks onto the first new post that gets a comment."
+          />
+          <div className="flex flex-wrap gap-2 pt-1">
+            {(["instagram", "messenger"] as const).map((ch) => (
+              <label key={ch} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs", channels.includes(ch) && "border-primary bg-primary/5")}>
+                <input
+                  type="checkbox"
+                  className="accent-[var(--primary)]"
+                  checked={channels.includes(ch)}
                   onChange={(e) => {
-                    setWords(e.target.value);
+                    setChannels(e.target.checked ? [...channels, ch] : channels.filter((c) => c !== ch));
                     setDirty(true);
                   }}
                 />
-                <p className="mt-1 text-xs text-muted-foreground">Separate words with commas. Add common typos too (for example: link, lnk, links).</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  Try:
-                  {["LINK", "INFO", "PRICE", "GUIDE"].map((w) => (
-                    <button
-                      key={w}
-                      type="button"
-                      onClick={() => {
-                        if (!keywords.map((k) => k.toLowerCase()).includes(w.toLowerCase())) setWords(keywords.length ? `${words.replace(/,\s*$/, "")}, ${w}` : w);
-                        setDirty(true);
-                      }}
-                      className="rounded-full border bg-card px-2 py-0.5 font-medium text-foreground hover:bg-muted"
-                    >
-                      + {w}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <Choice checked={flow.anyWord} onClick={() => update({ anyWord: true })} title="Any comment" hint="Everyone who comments gets the DM." />
-          </Section>
+                {ch === "instagram" ? "Instagram" : "Facebook"}
+              </label>
+            ))}
+          </div>
 
-          <Section
-            step={++step}
-            title="Reply to the comment publicly"
-            hint="Shows others it works, which brings in more comments. One reply is picked at random each time so it looks natural."
-            right={<Switch label="Reply publicly" on={flow.publicReplyOn} onChange={(v) => update({ publicReplyOn: v })} />}
-          >
-            {flow.publicReplyOn && (
-              <>
-                {flow.publicReplies.map((r, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input
-                      aria-label={`Public reply ${i + 1}`}
-                      value={r}
-                      maxLength={300}
-                      onChange={(e) => update({ publicReplies: flow.publicReplies.map((x, j) => (j === i ? e.target.value : x)) })}
-                    />
-                    {flow.publicReplies.length > 1 && (
-                      <Button variant="ghost" size="icon" aria-label="Remove reply" onClick={() => update({ publicReplies: flow.publicReplies.filter((_, j) => j !== i) })}>
-                        <X />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                {flow.publicReplies.length < MAX_PUBLIC_REPLIES && (
-                  <Button variant="outline" size="sm" onClick={() => update({ publicReplies: [...flow.publicReplies, ""] })}>
-                    <Plus /> Add another reply
+          <Heading>And this comment has</Heading>
+          <Choice checked={!flow.anyWord} onClick={() => update({ anyWord: false })} title="a specific word or words">
+            <Input
+              aria-label="Trigger words"
+              value={words}
+              placeholder="Enter a word or multiple"
+              onChange={(e) => {
+                setWords(e.target.value);
+                setDirty(true);
+              }}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Use commas to separate words</p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              For example:
+              {["Price", "Link", "Shop"].map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => {
+                    if (!keywords.map((k) => k.toLowerCase()).includes(w.toLowerCase())) setWords(keywords.length ? `${words.replace(/,\s*$/, "")}, ${w}` : w);
+                    setDirty(true);
+                  }}
+                  className="rounded-full bg-primary/10 px-2.5 py-0.5 font-medium text-primary hover:bg-primary/20"
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          </Choice>
+          <Choice checked={flow.anyWord} onClick={() => update({ anyWord: true })} title="any word" />
+          <Row label="reply to their comments under the post" on={flow.publicReplyOn} onToggle={(v) => update({ publicReplyOn: v })}>
+            {flow.publicReplies.map((r, i) => (
+              <div key={i} className="flex gap-1">
+                <Input
+                  aria-label={`Public reply ${i + 1}`}
+                  value={r}
+                  maxLength={300}
+                  onChange={(e) => update({ publicReplies: flow.publicReplies.map((x, j) => (j === i ? e.target.value : x)) })}
+                />
+                {flow.publicReplies.length > 1 && (
+                  <Button variant="ghost" size="icon" aria-label="Remove reply" onClick={() => update({ publicReplies: flow.publicReplies.filter((_, j) => j !== i) })}>
+                    <X />
                   </Button>
                 )}
-              </>
-            )}
-          </Section>
-
-          <Section
-            step={++step}
-            title="Opening DM with a button"
-            hint="Recommended. Instagram only lets you send one message to someone who commented until they reply. Tapping your button counts as a reply, so the rest of your messages can go through."
-            right={<Switch label="Opening DM" on={flow.opening.on} onChange={(v) => update({ opening: { ...flow.opening, on: v } })} />}
-          >
-            {flow.opening.on && (
-              <>
-                <Counted label="Opening message" value={flow.opening.text} max={TEXT_MAX} onChange={(v) => update({ opening: { ...flow.opening, text: v } })} />
-                <Input aria-label="Opening button label" value={flow.opening.button} maxLength={BUTTON_MAX} placeholder="Button label" onChange={(e) => update({ opening: { ...flow.opening, button: e.target.value } })} />
-              </>
-            )}
-          </Section>
-
-          <Section
-            step={++step}
-            title="Ask them to follow you first"
-            hint="Instagram only. When they tap the button, we check they follow you before sending the link."
-            right={<Switch label="Ask to follow" on={flow.follow.on} onChange={(v) => update({ follow: { ...flow.follow, on: v } })} />}
-          >
-            {flow.follow.on && (
-              <>
-                <Counted label="Follow message" value={flow.follow.text} max={TEXT_MAX} onChange={(v) => update({ follow: { ...flow.follow, text: v } })} />
-                <Input aria-label="Follow button label" value={flow.follow.button} maxLength={BUTTON_MAX} placeholder="Button label" onChange={(e) => update({ follow: { ...flow.follow, button: e.target.value } })} />
-              </>
-            )}
-          </Section>
-
-          <Section
-            step={++step}
-            title="Ask for their email"
-            hint="Their email is saved to their contact, so you can follow up by email later."
-            right={<Switch label="Ask for email" on={flow.email.on} onChange={(v) => update({ email: { ...flow.email, on: v } })} />}
-          >
-            {flow.email.on && <Counted label="Email question" rows={3} value={flow.email.text} max={TEXT_MAX} onChange={(v) => update({ email: { ...flow.email, text: v } })} />}
-          </Section>
-
-          <Section step={++step} title="Send your link" hint="The message with the button that opens your link.">
-            <Counted label="Link message" rows={3} value={flow.link.text} max={TEXT_MAX} onChange={(v) => update({ link: { ...flow.link, text: v } })} />
-            {flow.link.links.map((l, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2">
-                <Link2 className="size-4 shrink-0 text-primary" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{l.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">{l.url}</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setNewLink({ ...l, index: i } as FlowLink & { index: number })}>
-                  Edit
-                </Button>
-                <Button variant="ghost" size="icon" aria-label="Remove link" onClick={() => update({ link: { ...flow.link, links: flow.link.links.filter((_, j) => j !== i) } })}>
-                  <X />
-                </Button>
               </div>
             ))}
-            {newLink ? (
-              <div className="space-y-2 rounded-xl border border-primary/40 bg-primary/5 p-3">
-                <Input aria-label="Button label" autoFocus value={newLink.label} maxLength={BUTTON_MAX} placeholder="Button label, e.g. Get the guide" onChange={(e) => setNewLink({ ...newLink, label: e.target.value })} />
-                <Input aria-label="Link" value={newLink.url} placeholder="Link, e.g. yoursite.com/guide" onChange={(e) => setNewLink({ ...newLink, url: e.target.value })} />
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setNewLink(null)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!newLink.label.trim() || !newLink.url.trim()}
-                    onClick={() => {
-                      const idx = (newLink as FlowLink & { index?: number }).index;
-                      const item = { label: newLink.label.trim(), url: newLink.url.trim() };
-                      const links = idx === undefined ? [...flow.link.links, item] : flow.link.links.map((x, j) => (j === idx ? item : x));
-                      update({ link: { ...flow.link, links } });
-                      setNewLink(null);
-                    }}
-                  >
-                    Save link
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              flow.link.links.length < MAX_LINKS && (
-                <Button variant="outline" className="w-full" onClick={() => setNewLink({ label: "", url: "" })}>
-                  <Plus /> Add a link
-                </Button>
-              )
+            {flow.publicReplies.length < MAX_PUBLIC_REPLIES && (
+              <button type="button" className="text-xs font-medium text-primary" onClick={() => update({ publicReplies: [...flow.publicReplies, ""] })}>
+                + Add another reply
+              </button>
             )}
-          </Section>
+            <p className="text-xs text-muted-foreground">One is picked at random each time.</p>
+          </Row>
 
-          <Section
-            step={++step}
-            title="Follow up if they don't tap the link"
-            hint="We track taps on your link. If they haven't tapped it after the wait, they get one reminder."
-            right={<Switch label="Follow-up" on={flow.followUp.on} onChange={(v) => update({ followUp: { ...flow.followUp, on: v } })} />}
-          >
-            {flow.followUp.on && (
-              <>
-                <Counted label="Follow-up message" rows={3} value={flow.followUp.text} max={TEXT_MAX} onChange={(v) => update({ followUp: { ...flow.followUp, text: v } })} />
-                <label className="flex items-center gap-2 text-sm">
-                  Send it after
-                  <select
-                    className="h-9 rounded-lg border border-input bg-card px-2 text-sm"
-                    value={flow.followUp.delayMinutes}
-                    onChange={(e) => update({ followUp: { ...flow.followUp, delayMinutes: Number(e.target.value) } })}
-                  >
-                    {FOLLOW_UP_DELAYS.map((m) => (
-                      <option key={m} value={m}>
-                        {delayLabel(m)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
+          <Heading>They will get</Heading>
+          <Row label="an opening DM" on={flow.opening.on} onToggle={(v) => update({ opening: { ...flow.opening, on: v } })}>
+            <Counted label="Opening message" value={flow.opening.text} max={TEXT_MAX} onChange={(v) => update({ opening: { ...flow.opening, text: v } })} />
+            <Input aria-label="Opening button label" value={flow.opening.button} maxLength={BUTTON_MAX} placeholder="Button label" onChange={(e) => update({ opening: { ...flow.opening, button: e.target.value } })} />
+            <button type="button" onClick={() => setWhyOpen(!whyOpen)} className="flex items-center gap-1 text-xs font-medium text-primary">
+              <Info className="size-3.5" /> Why does an opening DM matter?
+            </button>
+            {whyOpen && (
+              <p className="rounded-lg bg-card p-2 text-xs text-muted-foreground">
+                Instagram only lets you send one message to someone who commented until they reply. Tapping this button counts as a reply, so the rest of your messages can go through.
+              </p>
             )}
-          </Section>
+          </Row>
+          <Row label="a DM asking to follow you before they get the link" note="Instagram only" on={flow.follow.on} onToggle={(v) => update({ follow: { ...flow.follow, on: v } })}>
+            <Counted label="Follow message" value={flow.follow.text} max={TEXT_MAX} onChange={(v) => update({ follow: { ...flow.follow, text: v } })} />
+            <Input aria-label="Follow button label" value={flow.follow.button} maxLength={BUTTON_MAX} placeholder="Button label" onChange={(e) => update({ follow: { ...flow.follow, button: e.target.value } })} />
+          </Row>
+          <Row label="a DM asking for their email" on={flow.email.on} onToggle={(v) => update({ email: { ...flow.email, on: v } })}>
+            <Counted label="Email question" rows={3} value={flow.email.text} max={TEXT_MAX} onChange={(v) => update({ email: { ...flow.email, text: v } })} />
+          </Row>
+
+          <Heading>And then, they will get</Heading>
+          <Row label="a DM with a link">
+            <Counted label="Link message" rows={3} value={flow.link.text} max={TEXT_MAX} placeholder="Write a message" onChange={(v) => update({ link: { ...flow.link, text: v } })} />
+            {flow.link.links.map((l, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+                <button type="button" className="min-w-0 flex-1 truncate text-left text-sm" title={l.url} onClick={() => setEditing(i)}>
+                  {l.label}
+                </button>
+                <button type="button" aria-label="Edit link" onClick={() => setEditing(i)} className="text-primary">
+                  <Link2 className="size-4" />
+                </button>
+                <button type="button" aria-label="Remove link" onClick={() => update({ link: { ...flow.link, links: flow.link.links.filter((_, j) => j !== i) } })} className="text-muted-foreground">
+                  <X className="size-4" />
+                </button>
+              </div>
+            ))}
+            {flow.link.links.length < MAX_LINKS && (
+              <Button variant="outline" className="w-full" onClick={() => setEditing(-1)}>
+                <Plus /> Add A Link
+              </Button>
+            )}
+          </Row>
+          <Row label="a follow up DM if they don't click the link" on={flow.followUp.on} onToggle={(v) => update({ followUp: { ...flow.followUp, on: v } })}>
+            <Counted label="Follow-up message" rows={3} value={flow.followUp.text} max={TEXT_MAX} onChange={(v) => update({ followUp: { ...flow.followUp, text: v } })} />
+            <label className="flex items-center gap-2 text-sm">
+              Send it after
+              <select
+                className="h-9 rounded-lg border border-input bg-card px-2 text-sm"
+                value={flow.followUp.delayMinutes}
+                onChange={(e) => update({ followUp: { ...flow.followUp, delayMinutes: Number(e.target.value) } })}
+              >
+                {FOLLOW_UP_DELAYS.map((m) => (
+                  <option key={m} value={m}>
+                    {delayLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </Row>
 
           {problems.length > 0 && (
             <div className="flex gap-2 rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
@@ -512,28 +474,44 @@ export function QuickBuilder({ automation: a, metaConnected, canDelete }: { auto
           )}
         </div>
 
-        {/* Preview */}
-        <div className="lg:sticky lg:top-20 lg:self-start">
-          <PhonePreview flow={flow} keywords={keywords} tab={tab} automationId={a.id} name={name} />
-          <div className="mx-auto mt-3 flex w-fit rounded-full border bg-card p-1 text-sm shadow-sm" role="tablist">
-            {(["post", "comments", "dm", "test"] as const).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
-                className={cn("rounded-full px-3 py-1 font-medium capitalize", tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t === "dm" ? "DM" : t === "test" ? "Try it" : t}
-              </button>
-            ))}
+        {/* Preview pane */}
+        <div className="bg-muted/40 p-4 sm:p-6">
+          <p className="mb-4 text-sm text-muted-foreground">Preview</p>
+          <div className="lg:sticky lg:top-24">
+            <PhonePreview flow={flow} keywords={keywords} tab={tab} automationId={a.id} name={name} />
+            <div className="mx-auto mt-4 flex w-fit rounded-full bg-muted p-1 text-sm" role="tablist">
+              {(["post", "comments", "dm", "test"] as const).map((t) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={tab === t}
+                  onClick={() => setTab(t)}
+                  className={cn("rounded-full px-3 py-1 capitalize", tab === t ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                >
+                  {t === "dm" ? "DM" : t === "test" ? "Try it" : t}
+                </button>
+              ))}
+            </div>
+            {tab === "test" && dirty && <p className="mt-2 text-center text-xs text-muted-foreground">Try it uses your saved version. Press Save first to test your changes.</p>}
           </div>
-          {tab === "test" && dirty && <p className="mt-2 text-center text-xs text-muted-foreground">Try it uses your saved version. Press Save first to test your changes.</p>}
         </div>
       </div>
+
+      {editing !== null && (
+        <LinkDialog
+          initial={editing >= 0 ? flow.link.links[editing]! : { label: "", url: "" }}
+          onCancel={() => setEditing(null)}
+          onSave={(l) => {
+            const links = editing >= 0 ? flow.link.links.map((x, j) => (j === editing ? l : x)) : [...flow.link.links, l];
+            update({ link: { ...flow.link, links } });
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
+
 
 // ───────── Phone preview ─────────
 
