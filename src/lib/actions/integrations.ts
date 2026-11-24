@@ -72,23 +72,36 @@ export async function disconnectMeta() {
   revalidatePath("/integrations");
 }
 
-export async function checkMetaConnection() {
+export type CheckState = { ok?: string; error?: string } | undefined;
+
+export async function checkMetaConnection(_: CheckState): Promise<CheckState> {
   const ctx = await requireWorkspace("admin");
   const [row] = await db.select().from(integrations).where(and(eq(integrations.workspaceId, ctx.workspace.id), eq(integrations.provider, "meta"))).limit(1);
-  if (!row?.secretEnc || !row.pageId) return;
+  if (!row?.secretEnc || !row.pageId) return { error: "Nothing is connected yet. Press Connect with Facebook." };
   const version = metaConfig().version;
-  try {
-    const res = await fetch(`https://graph.facebook.com/${version}/${row.pageId}?fields=id,name&access_token=${decrypt(row.secretEnc)}`, { cache: "no-store" });
-    const json = (await res.json()) as { error?: { message: string } };
+  const token = decrypt(row.secretEnc);
+  const get = async (path: string) => {
+    const res = await fetch(`https://graph.facebook.com/${version}/${path}&access_token=${token}`, { cache: "no-store" });
+    const json = (await res.json()) as { error?: { message: string }; name?: string; username?: string };
     if (!res.ok || json.error) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+    return json;
+  };
+  try {
+    const page = await get(`${row.pageId}?fields=id,name`);
+    let ig = "";
+    if (row.instagramAccountId) {
+      const acct = await get(`${row.instagramAccountId}?fields=id,username`);
+      ig = ` and Instagram @${acct.username ?? row.instagramUsername}`;
+    }
     await db.update(integrations).set({ status: "connected", lastError: null, updatedAt: new Date() }).where(eq(integrations.id, row.id));
+    revalidatePath("/integrations");
+    return { ok: `Working. ViralChat can reach your Facebook Page "${page.name ?? row.pageName}"${ig}.` };
   } catch (e) {
-    await db
-      .update(integrations)
-      .set({ status: "error", lastError: `Connection check failed: ${e instanceof Error ? e.message : String(e)}. Reconnect to refresh permissions.`, updatedAt: new Date() })
-      .where(eq(integrations.id, row.id));
+    const message = `Connection check failed: ${e instanceof Error ? e.message : String(e)}. Press Reconnect to refresh it.`;
+    await db.update(integrations).set({ status: "error", lastError: message, updatedAt: new Date() }).where(eq(integrations.id, row.id));
+    revalidatePath("/integrations");
+    return { error: message };
   }
-  revalidatePath("/integrations");
 }
 
 export type KeyState = { error?: string; ok?: string } | undefined;

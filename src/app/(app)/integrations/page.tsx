@@ -1,3 +1,4 @@
+import { CheckMetaButton } from "./check-meta";
 import { eq } from "drizzle-orm";
 import { CheckCircle2, AlertTriangle, CircleDashed, Sparkles, Copy } from "lucide-react";
 import { db } from "@/db";
@@ -7,7 +8,7 @@ import { metaConfig, META_SCOPES } from "@/lib/meta";
 import { stripeConfigured } from "@/lib/stripe";
 import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { checkMetaConnection, disconnectMeta, removeOpenAIKey } from "@/lib/actions/integrations";
+import { disconnectMeta, removeOpenAIKey } from "@/lib/actions/integrations";
 import { InstagramIcon, MessengerIcon } from "@/components/brand-icons";
 import { OpenAIKeyForm } from "./openai-form";
 import { timeAgo } from "@/lib/utils";
@@ -98,7 +99,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
                 )}
                 {meta && meta.status !== "disconnected" && (
                   <>
-                    <form action={checkMetaConnection}><Button variant="outline">Check connection</Button></form>
+                    <CheckMetaButton />
                     <form action={disconnectMeta}><Button variant="ghost" className="text-destructive">Disconnect</Button></form>
                   </>
                 )}
