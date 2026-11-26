@@ -21,7 +21,7 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 export const roleEnum = pgEnum("role", ["owner", "admin", "staff"]);
 export const planEnum = pgEnum("plan", ["free", "starter", "professional", "business", "agency"]);
 export const channelEnum = pgEnum("channel", ["instagram", "messenger", "demo", "test"]);
-export const providerEnum = pgEnum("provider", ["meta", "openai", "resend"]);
+export const providerEnum = pgEnum("provider", ["meta", "openai", "resend", "youtube"]);
 export const integrationStatusEnum = pgEnum("integration_status", ["disconnected", "connected", "error"]);
 export const leadTempEnum = pgEnum("lead_temperature", ["hot", "warm", "cold"]);
 export const conversationStatusEnum = pgEnum("conversation_status", ["open", "pending", "closed"]);
@@ -401,6 +401,60 @@ export const automationRuns = pgTable(
     index("runs_conv_idx").on(t.conversationId, t.status),
   ],
 );
+
+// ───────────────────────── YouTube ─────────────────────────
+// YouTube has no DMs and no comment webhooks: ViralChat checks the connected channel for new
+// comments every few minutes and replies publicly under the ones that match a rule.
+
+export const youtubeAutomations = pgTable(
+  "youtube_automations",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    status: automationStatusEnum("status").notNull().default("draft"),
+    anyWord: boolean("any_word").notNull().default(false),
+    keywords: text("keywords").array().notNull().default(sql`'{}'::text[]`),
+    // Empty = any video on the channel
+    videoIds: text("video_ids").array().notNull().default(sql`'{}'::text[]`),
+    // One is picked at random for each reply. Supports {{name}} and {{link}}.
+    replies: text("replies").array().notNull().default(sql`'{}'::text[]`),
+    link: text("link").notNull().default(""),
+    repliesCount: integer("replies_count").notNull().default(0),
+    lastReplyAt: timestamp("last_reply_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("yt_automations_ws_idx").on(t.workspaceId)],
+);
+
+export const youtubeReplies = pgTable(
+  "youtube_replies",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    automationId: uuid("automation_id").references(() => youtubeAutomations.id, { onDelete: "set null" }),
+    // The YouTube comment thread we answered. Unique so a comment is never answered twice.
+    commentId: text("comment_id").notNull(),
+    videoId: text("video_id"),
+    authorName: text("author_name"),
+    commentText: text("comment_text"),
+    replyText: text("reply_text"),
+    status: text("status").notNull().default("sending"), // sending | sent | failed
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("yt_replies_comment_idx").on(t.workspaceId, t.commentId),
+    index("yt_replies_ws_idx").on(t.workspaceId, t.createdAt),
+  ],
+);
+
+export type YoutubeAutomation = typeof youtubeAutomations.$inferSelect;
 
 // ───────────────────────── AI ─────────────────────────
 

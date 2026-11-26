@@ -10,7 +10,7 @@ import { createAutomation, createCommentDm, duplicateAutomation } from "@/lib/ac
 import { TRIGGER_LABELS } from "@/lib/node-catalog";
 import { timeAgo } from "@/lib/utils";
 import { and } from "drizzle-orm";
-import { InstagramIcon, MessengerIcon } from "@/components/brand-icons";
+import { InstagramIcon, MessengerIcon, YouTubeIcon } from "@/components/brand-icons";
 
 export const metadata = { title: "Automations" };
 
@@ -28,6 +28,7 @@ export default async function AutomationsPage() {
         actions={
           <>
             <Link href="/templates" className={buttonVariants({ variant: "outline" })}>Browse templates</Link>
+            <Link href="/youtube" className={buttonVariants({ variant: "outline" })}><YouTubeIcon /> YouTube</Link>
             <form action={createAutomation}>
               <Button variant="outline"><Plus /> Custom flow</Button>
             </form>
