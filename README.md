@@ -45,6 +45,7 @@ npm test                      # unit tests (engine, webhook parsing, crypto, CSV
 | `ENCRYPTION_KEY` | 32-byte base64 key (`openssl rand -base64 32`). Encrypts Page tokens and API keys (AES-256-GCM) |
 | `CRON_SECRET` | Protects `/api/cron/automations` |
 | `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_GRAPH_VERSION` | Instagram & Messenger |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | YouTube comment replies |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | Platform AI key (workspaces can also add their own on the Integrations page) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_AGENCY` | Paid plans |
 
@@ -59,6 +60,15 @@ The app runs without the optional integrations: each screen says exactly what is
    - **Instagram** object: `messages`, `messaging_postbacks`, `comments`
 4. Permissions used: `pages_show_list, pages_manage_metadata, pages_messaging, pages_read_engagement, pages_manage_engagement, instagram_basic, instagram_manage_messages, instagram_manage_comments, business_management`. Accounts that aren't app testers need **Advanced Access** via App Review. Use `/privacy`, `/terms` and `/data-deletion` (templates, have them reviewed) for the review.
 5. The Instagram account must be a professional account linked to the Facebook Page, with *Allow access to messages* enabled.
+
+### YouTube setup (comment auto-replies)
+
+YouTube has no DMs and no comment webhooks. ViralChat checks each connected channel for new comments (at most every 2 minutes) and replies publicly under the ones that match a rule at `/youtube`.
+
+1. In Google Cloud, create a project, enable **YouTube Data API v3**, configure the OAuth consent screen (External, scope `youtube.force-ssl`) and publish it to production (while in Testing, Google expires access after 7 days).
+2. Create an OAuth client (Web application) with redirect URI `${APP_URL}/api/integrations/youtube/callback`, then set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+3. Something must call `GET /api/cron/youtube` every few minutes. `.github/workflows/youtube-poll.yml` does this every 5 minutes (set the repo variable `APP_URL` if the app isn't at viralchat-ai.vercel.app). No secret is needed.
+4. Quota: the default 10,000 units/day allows roughly 150-190 replies a day (50 units per reply plus 1 per check).
 
 ### Stripe setup
 

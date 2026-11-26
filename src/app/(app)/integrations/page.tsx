@@ -9,7 +9,10 @@ import { stripeConfigured } from "@/lib/stripe";
 import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { disconnectMeta, removeOpenAIKey } from "@/lib/actions/integrations";
-import { InstagramIcon, MessengerIcon } from "@/components/brand-icons";
+import { InstagramIcon, MessengerIcon, YouTubeIcon } from "@/components/brand-icons";
+import { youtubeConfig } from "@/lib/youtube";
+import { disconnectYoutube } from "@/lib/actions/youtube";
+import Link from "next/link";
 import { OpenAIKeyForm } from "./openai-form";
 import { timeAgo } from "@/lib/utils";
 
@@ -24,7 +27,7 @@ function Status({ status }: { status: "connected" | "error" | "disconnected" | "
 
 const PLANNED = [
   { name: "WhatsApp Business Platform", phase: "Phase 2", note: "Official Cloud API, approved templates" },
-  { name: "TikTok Business Messaging", phase: "Phase 3", note: "Where the API is available" },
+  { name: "TikTok", phase: "Waiting on TikTok", note: "Needs TikTok to approve ViralChat for its business API first" },
   { name: "Twilio SMS", phase: "Phase 2", note: "Two-way SMS with STOP handling" },
   { name: "Brevo / SendGrid / Amazon SES", phase: "Phase 2", note: "Email sequences" },
   { name: "Google Calendar & Outlook", phase: "Phase 2", note: "Appointment booking" },
@@ -39,6 +42,9 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
   const rows = await db.select().from(integrations).where(eq(integrations.workspaceId, ctx.workspace.id));
   const meta = rows.find((r) => r.provider === "meta");
   const openai = rows.find((r) => r.provider === "openai");
+  const yt = rows.find((r) => r.provider === "youtube");
+  const ytCfg = youtubeConfig();
+  const ytStatus = !ytCfg.configured ? "not_configured" : yt?.status ?? "disconnected";
   const cfg = metaConfig();
   const isAdmin = hasRole(ctx.role, "admin");
   const metaStatus = !cfg.configured ? "not_configured" : meta?.status ?? "disconnected";
@@ -46,7 +52,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
   return (
     <>
       <PageHeader title="Integrations" description="Connect the accounts ViralChat AI automates. Credentials are encrypted at rest and never shown again after saving." />
-      {typeof sp.error === "string" && <div className="mb-4"><Alert tone="danger" title="Connection problem">{sp.error === "meta_not_configured" ? "The Meta app credentials are not configured on the server yet (see below)." : sp.error === "forbidden" ? "Only workspace admins can connect integrations." : sp.error}</Alert></div>}
+      {typeof sp.error === "string" && <div className="mb-4"><Alert tone="danger" title="Connection problem">{sp.error === "meta_not_configured" ? "The Meta app credentials are not configured on the server yet (see below)." : sp.error === "youtube_not_configured" ? "The Google credentials for YouTube are not configured on the server yet (see below)." : sp.error === "forbidden" ? "Only workspace admins can connect integrations." : sp.error}</Alert></div>}
       {sp.connected === "meta" && <div className="mb-4"><Alert tone="success" title="Meta connected">Instagram and Messenger events will now reach your automations and inbox.</Alert></div>}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -102,6 +108,54 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
                     <CheckMetaButton />
                     <form action={disconnectMeta}><Button variant="ghost" className="text-destructive">Disconnect</Button></form>
                   </>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">Ask a workspace admin to manage this connection.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-red-600 text-white"><YouTubeIcon className="size-5" /></span>
+              <Status status={ytStatus} />
+            </div>
+            <CardTitle className="mt-3">YouTube</CardTitle>
+            <CardDescription>Auto-reply under comments that contain your keyword, with your link. YouTube has no DMs, so replies are public.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 text-sm">
+            {yt && yt.status !== "disconnected" && (
+              <div className="rounded-xl bg-muted p-3">
+                <p><span className="text-muted-foreground">Channel:</span> {yt.config?.channelTitle} {yt.config?.channelHandle && <span className="text-xs text-muted-foreground">({yt.config.channelHandle})</span>}</p>
+                {yt.connectedAt && <p className="text-xs text-muted-foreground">Connected {timeAgo(yt.connectedAt)}</p>}
+                {yt.lastError && <p className="mt-2 text-destructive">{yt.lastError}</p>}
+              </div>
+            )}
+            {!ytCfg.configured && (
+              <Alert tone="warning" title="Server setup required before connecting">
+                Set <strong>{ytCfg.missing.join(", ")}</strong> on the server from a Google Cloud OAuth client with the YouTube Data API v3 turned on.
+              </Alert>
+            )}
+            <details className="rounded-xl border p-3">
+              <summary className="cursor-pointer font-medium">Setup details for Google Cloud</summary>
+              <dl className="mt-3 flex flex-col gap-2">
+                <div><dt className="text-muted-foreground">Authorized redirect URI</dt><dd><code className="break-all text-xs">{ytCfg.redirectUri}</code></dd></div>
+                <div><dt className="text-muted-foreground">API to enable</dt><dd className="text-xs">YouTube Data API v3</dd></div>
+                <div><dt className="text-muted-foreground">Scope</dt><dd className="text-xs">youtube.force-ssl (read comments, reply as the channel)</dd></div>
+              </dl>
+            </details>
+            {isAdmin ? (
+              <div className="flex flex-wrap gap-2">
+                {ytCfg.configured && (
+                  <a href="/api/integrations/youtube/connect" className={buttonVariants({ variant: yt?.status === "connected" ? "outline" : "gradient" })}>
+                    {yt?.status === "connected" ? "Reconnect / change channel" : yt?.status === "error" ? "Reconnect" : "Connect YouTube"}
+                  </a>
+                )}
+                {yt?.status === "connected" && <Link href="/youtube" className={buttonVariants({ variant: "outline" })}>Set up replies</Link>}
+                {yt && yt.status !== "disconnected" && (
+                  <form action={disconnectYoutube}><Button variant="ghost" className="text-destructive">Disconnect</Button></form>
                 )}
               </div>
             ) : (

@@ -18,3 +18,12 @@ export function MessengerIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function YouTubeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" {...props}>
+      <rect x="2.5" y="5" width="19" height="14" rx="4" />
+      <path d="m10 9.5 4.5 2.5-4.5 2.5z" fill="currentColor" />
+    </svg>
+  );
+}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, asc, count, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
-import { automationRuns, automations, contacts, conversations, messages, workspaces, type FlowGraph } from "@/db/schema";
+import { automationRuns, automations, contacts, conversations, messages, workspaces, youtubeAutomations, type FlowGraph } from "@/db/schema";
 import { requireWorkspace } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { getPlan } from "@/lib/plans";
@@ -206,8 +206,12 @@ export async function setAutomationStatus(id: string, status: "active" | "paused
       .select({ n: count() })
       .from(automations)
       .where(and(eq(automations.workspaceId, ctx.workspace.id), eq(automations.status, "active")))) as [{ n: number }];
+    const [{ n: yt }] = (await db
+      .select({ n: count() })
+      .from(youtubeAutomations)
+      .where(and(eq(youtubeAutomations.workspaceId, ctx.workspace.id), eq(youtubeAutomations.status, "active")))) as [{ n: number }];
     const limit = getPlan(ws?.plan).limits.activeAutomations;
-    if (n >= limit) return { ok: false, error: `Your plan allows ${limit} active automations. Pause one or upgrade on the Billing page.` };
+    if (n + yt >= limit) return { ok: false, error: `Your plan allows ${limit} active automations. Pause one or upgrade on the Billing page.` };
   }
   await db.update(automations).set({ status, updatedAt: new Date() }).where(eq(automations.id, id));
   await audit(ctx.workspace.id, ctx.user.id, `automation.${status}`, id);

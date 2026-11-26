@@ -1,6 +1,7 @@
 import { safeEqual } from "@/lib/crypto";
 import { processDueRuns } from "@/lib/engine/runtime";
 import { processDueEmails } from "@/lib/email-server";
+import { pollAllYoutube } from "@/lib/youtube-server";
 
 /**
  * Resumes delayed automation steps, expires unanswered questions, and sends due follow-up emails.
@@ -13,5 +14,6 @@ export async function GET(req: Request) {
   if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return new Response("Unauthorized", { status: 401 });
   const result = await processDueRuns(100);
   const emails = await processDueEmails(200);
-  return Response.json({ ok: true, ...result, ...emails });
+  const youtube = await pollAllYoutube(20_000).catch((e) => ({ error: String(e) }));
+  return Response.json({ ok: true, ...result, ...emails, youtube });
 }

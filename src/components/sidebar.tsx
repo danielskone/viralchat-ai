@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
+import { YouTubeIcon } from "./brand-icons";
 
 type Item = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; soon?: boolean; badge?: number };
 
@@ -24,6 +25,7 @@ export function Sidebar({ unread }: { unread: number }) {
         { href: "/pipeline", label: "CRM Pipeline", icon: KanbanSquare },
         { href: "/chatbot", label: "AI Chatbot", icon: Bot },
         { href: "/automations", label: "Automations", icon: Workflow },
+        { href: "/youtube", label: "YouTube Replies", icon: YouTubeIcon },
         { href: "/booking", label: "Booking", icon: CalendarDays },
         { href: "/pages", label: "Landing Pages", icon: PanelsTopLeft },
         { href: "/broadcasts", label: "Broadcasts", icon: Megaphone },
